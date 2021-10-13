@@ -1,0 +1,24 @@
+{
+    "title": "user_account",
+    "description": "Schema to validate user_account.",
+    "type": "object",
+    "properties": {
+        "email": {
+            "type": "string"
+        },
+        "membership": {
+            "enum": [
+                "standard",
+                "premium"
+            ]
+        },
+        "is_active": {
+            "type": "boolean"
+        }
+    },
+    "required": [
+		"email",
+		"membership"
+	],
+    "additionalProperties": false
+}

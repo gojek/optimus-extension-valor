@@ -1,0 +1,25 @@
+resources: 
+- name: user_account
+  type: file
+  path: ./example/resource/user_account.json
+  format: yaml
+  framework_names:
+  - user_account_validation
+
+frameworks:
+- name: user_account_validation
+  schemas:
+  - name: user_account_rule
+    type: file
+    format: json
+    path: ./example/schema/user_account_rule.json
+    output_is_error: true
+  procedures:
+  - name: enrich_user_account
+    type: file
+    format: jsonnet
+    path: ./example/procedure/enrich_user_account.jsonnet
+  output_targets:
+  - name: std_output
+    type: std
+    format: json
