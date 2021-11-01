@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+
 	"github.com/gojek/optimus-extension-valor/core"
 	_ "github.com/gojek/optimus-extension-valor/plugin/endec"
 	_ "github.com/gojek/optimus-extension-valor/plugin/formatter"
@@ -15,6 +17,10 @@ import (
 var defaultPath = "./valor.yaml"
 
 func main() {
+	var args []string
+	if len(os.Args) > 1 {
+		args = append(args, os.Args[1])
+	}
 	rcp := loadRecipe()
 	eval, err := core.NewPipeline(rcp)
 	if err != nil {

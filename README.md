@@ -26,7 +26,7 @@ resources:
 - name: user_account
   type: file
   path: ./example/resource/user_account.json
-  format: yaml
+  format: json
   framework_names:
   - user_account_validation
 

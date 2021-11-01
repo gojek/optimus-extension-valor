@@ -3,7 +3,7 @@ package core
 import (
 	"errors"
 	"fmt"
-	"log"
+	"strings"
 
 	"github.com/gojek/optimus-extension-valor/model"
 	"github.com/gojek/optimus-extension-valor/recipe"
@@ -20,6 +20,9 @@ var isNotToFormat = map[string]bool{
 	"json":    true,
 	"jsonnet": true,
 }
+
+var logPrefix = strings.Repeat("=", 48)
+var logSuffix = strings.Repeat("=", 48)
 
 // Pipeline holds information on how a pipeline is executed
 type Pipeline struct {
@@ -46,7 +49,7 @@ func (p *Pipeline) Flush() error {
 		return errors.New("pipeline is not executed")
 	}
 
-	log.Println("Flushing Output")
+	fmt.Printf("%s Flushing Output %s\n", logPrefix, logSuffix)
 	if len(p.schemaRstList) > 0 {
 		schemaOutputMap := p.schemaRstListToOutputMap(p.schemaRstList)
 		err := p.flushOutput("schema", schemaOutputMap)
@@ -63,13 +66,13 @@ func (p *Pipeline) Flush() error {
 	}
 
 	if p.pipelineExecErr {
-		log.Println("Finished with Execution Error")
+		fmt.Printf("%s Finished with Execution Error %s\n", logPrefix, logSuffix)
 		return errors.New("execution error encountered")
 	} else if p.pipelineBusinessErr {
-		log.Println("Finished with Business Error")
+		fmt.Printf("%s Finished with Business Error %s\n", logPrefix, logSuffix)
 		return errors.New("business error encountered")
 	} else {
-		log.Println("Finished Successfully")
+		fmt.Printf("%s Finished Successfully %s\n", logPrefix, logSuffix)
 	}
 	fmt.Println()
 	return nil
@@ -77,7 +80,6 @@ func (p *Pipeline) Flush() error {
 
 func (p *Pipeline) flushOutput(key string, outputMap map[*recipe.Metadata][]*model.Data) error {
 	var outputErrors []error
-	progress := NewProgress(key, len(outputMap))
 	for output, listOfData := range outputMap {
 		updatedListOfData := make([]*model.Data, len(listOfData))
 		for i, d := range listOfData {
@@ -121,9 +123,7 @@ func (p *Pipeline) flushOutput(key string, outputMap map[*recipe.Metadata][]*mod
 			newErr := fmt.Errorf("writing list of data: %v", err)
 			outputErrors = append(outputErrors, newErr)
 		}
-		progress.Increment()
 	}
-	progress.Wait()
 	if len(outputErrors) > 0 {
 		printErrors(outputErrors)
 		return errors.New("one or more errors are encountered")
@@ -170,7 +170,7 @@ func (p *Pipeline) resultToOutput(result interface{}) *model.Data {
 		path = procedureRst.record.Path
 		metadata = procedureRst.record.Metadata
 		if procedureRst.err != nil {
-			content = []byte(fmt.Sprintf("%#v", procedureRst.err))
+			content = []byte(procedureRst.err.Error())
 		} else {
 			content = procedureRst.result
 		}
@@ -188,14 +188,13 @@ func (p *Pipeline) Execute() error {
 		return errors.New("pipeline is not built")
 	}
 
-	log.Println("Evaluating Resource")
+	fmt.Printf("%s Evaluating Resource %s\n", logPrefix, logSuffix)
 	p.evaluated = true
 	var schemaRstList []*schemaResult
 	var procedureRstList []*procedureResult
 	pipelineExecErr := false
 	pipelineBusinessErr := false
 	for _, resource := range p.resourceList {
-		progress := NewProgress(resource.container.name, len(resource.frameworkNames))
 		resourceExecErr := false
 		resourceBusinessErr := false
 		for _, frwrkName := range resource.frameworkNames {
@@ -207,6 +206,8 @@ func (p *Pipeline) Execute() error {
 			schemaBusinessErr := false
 			for _, schema := range framework.schemas {
 				for _, schemaData := range schema.data {
+					name := fmt.Sprintf("%s: %s", schema.name, schemaData.Path)
+					progress := NewProgress(name, len(resource.container.data))
 					for _, record := range resource.container.data {
 						rst, err := ValidateSchema(schemaData.Content, record.Content)
 						schemaRst := &schemaResult{
@@ -219,13 +220,15 @@ func (p *Pipeline) Execute() error {
 						if err != nil {
 							schemaExecErr = true
 						}
-						if len(rst) > 0 {
+						if err != nil || len(rst) > 0 {
 							if schema.outputIsError {
 								schemaBusinessErr = true
 							}
 							schemaRstList = append(schemaRstList, schemaRst)
 						}
+						progress.Increment()
 					}
+					progress.Wait()
 				}
 			}
 			if schemaExecErr {
@@ -247,6 +250,7 @@ func (p *Pipeline) Execute() error {
 				if err != nil {
 					return err
 				}
+				progress := NewProgress(procedure.name, len(resource.container.data))
 				for _, record := range resource.container.data {
 					recordSnippet := fmt.Sprintf("local %s = %s;", resource.container.name, string(record.Content))
 					completeSnippet := recordSnippet + "\n" + procedureSnippet
@@ -261,9 +265,10 @@ func (p *Pipeline) Execute() error {
 					if err != nil {
 						procedureExecErr = true
 					}
-					if len(rst) > 0 && string(rst) != skipResult {
+					if err != nil || len(rst) > 0 && string(rst) != skipResult {
 						outputIsError, err := snippet.OutputIsError(procedure.name)
 						if err != nil {
+							progress.Wait()
 							return err
 						}
 						if outputIsError {
@@ -271,7 +276,9 @@ func (p *Pipeline) Execute() error {
 						}
 						procedureRstList = append(procedureRstList, procedureRst)
 					}
+					progress.Increment()
 				}
+				progress.Wait()
 			}
 			if procedureExecErr {
 				resourceExecErr = true
@@ -283,9 +290,7 @@ func (p *Pipeline) Execute() error {
 					break
 				}
 			}
-			progress.Increment()
 		}
-		progress.Wait()
 		if resourceExecErr {
 			pipelineExecErr = true
 			break
@@ -301,7 +306,7 @@ func (p *Pipeline) Execute() error {
 	p.pipelineExecErr = pipelineExecErr
 	p.pipelineBusinessErr = pipelineBusinessErr
 
-	log.Println("Finished evaluating")
+	fmt.Printf("%s Finished Evaluating %s\n", logPrefix, logSuffix)
 	fmt.Println()
 	return nil
 }
@@ -312,7 +317,7 @@ func (p *Pipeline) Build() error {
 		return errors.New("pipeline is already built")
 	}
 
-	log.Println("Building Pipeline")
+	fmt.Printf("%s Building Pipeline %s\n", logPrefix, logSuffix)
 	progress := NewProgress("building", len(p.nameToFramework))
 	frameworkNameToSnippet := make(map[string]*Snippet)
 	var buildingErrors []error
@@ -328,10 +333,11 @@ func (p *Pipeline) Build() error {
 	progress.Wait()
 
 	if len(buildingErrors) > 0 {
-		log.Println("Errors encountered")
+		fmt.Printf("%s Errors encountered %s\n", logPrefix, logSuffix)
 		printErrors(buildingErrors)
 		return errors.New("one or more errors are encountered")
 	}
+	fmt.Printf("%s Finished Building %s\n", logPrefix, logSuffix)
 	fmt.Println()
 
 	p.frameworkNameToSnippet = frameworkNameToSnippet
@@ -345,7 +351,7 @@ func (p *Pipeline) Load() error {
 		return errors.New("pipeline is already loaded")
 	}
 
-	log.Println("Loading Pipeline")
+	fmt.Printf("%s Loading Pipeline %s\n", logPrefix, logSuffix)
 	resourceList, err := p.loadResourceList(p.recipe.Resources)
 	if err != nil {
 		return err
@@ -355,7 +361,7 @@ func (p *Pipeline) Load() error {
 	if err != nil {
 		return err
 	}
-	log.Println("Finished Loading")
+	fmt.Printf("%s Finished Loading %s\n", logPrefix, logSuffix)
 	fmt.Println()
 
 	p.resourceList = resourceList
@@ -385,7 +391,7 @@ func (p *Pipeline) loadNameToFramework(rcpFrameworks []*recipe.Framework, nameTo
 	}
 	progress.Wait()
 	if len(frameworkErrors) > 0 {
-		log.Println("Errors encountered")
+		fmt.Printf("%s Errors encountered %s\n", logPrefix, logSuffix)
 		printErrors(frameworkErrors)
 		return nil, errors.New("one or more errors are encountered")
 	}
@@ -418,7 +424,7 @@ func (p *Pipeline) loadResourceList(rcpResources []*recipe.Resource) ([]*Resourc
 	}
 	progress.Wait()
 	if len(resourceErrors) > 0 {
-		log.Println("Errors encountered")
+		fmt.Printf("%s Errors encountered %s\n", logPrefix, logSuffix)
 		printErrors(resourceErrors)
 		return nil, errors.New("one or more errors are encountered")
 	}

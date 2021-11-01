@@ -19,8 +19,6 @@ type Std struct {
 func (s *Std) Write(dataList ...*model.Data) error {
 	const nameKey = "name"
 	const pathKey = "path"
-	maxLimiterLen := 64
-	os.Stdout.WriteString(strings.Repeat("=", maxLimiterLen) + "\n")
 	for _, d := range dataList {
 		var missingKeys []string
 		if d.Metadata[nameKey] == "" {
@@ -38,7 +36,6 @@ func (s *Std) Write(dataList ...*model.Data) error {
 			return err
 		}
 	}
-	os.Stdout.WriteString(strings.Repeat("=", maxLimiterLen) + "\n")
 	return nil
 }
 

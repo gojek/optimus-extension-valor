@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	maxNameLength = 13
+	maxNameLength = 21
 	defaultWidth  = 64
 )
 
