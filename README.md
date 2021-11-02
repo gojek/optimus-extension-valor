@@ -130,6 +130,14 @@ make bin
 
 There will be a new directory named `out` with an executable file `valor` as the result of the built project.
 
+Alternatively, distribution could also be made by running the following command:
+
+```bash
+make dist
+```
+
+There will be a new directory named `dist` with few executable files.
+
 ## How to Run
 
 In order to run this project, after building the binary executable, run

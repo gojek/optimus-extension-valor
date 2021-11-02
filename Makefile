@@ -1,7 +1,6 @@
 coverage_file=coverage.html
 binary_outdir=out
 project_name=valor
-image_tag=latest
 
 test:
 	go test ./... --cover
@@ -11,3 +10,6 @@ coverage:
 
 bin: test
 	go build -o ${binary_outdir}/${project_name} .
+
+dist: test
+	./script/build.sh
