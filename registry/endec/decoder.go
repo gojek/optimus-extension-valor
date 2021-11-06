@@ -1,42 +1,45 @@
 package endec
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
-	"github.com/gojek/optimus-extension-valor/plugin"
+	"github.com/gojek/optimus-extension-valor/model"
 )
 
-// DecoderFn is a getter for Decoder instance
-type DecoderFn func() plugin.Decoder
-
-// DecoderFactory is a factory for Decoder
-type DecoderFactory struct {
-	typeToFn map[string]DecoderFn
+// DecodeFactory is a factory for Decode
+type DecodeFactory struct {
+	typeToFn map[string]model.Decode
 }
 
 // Register registers a factory function for a type
-func (d *DecoderFactory) Register(_type string, fn DecoderFn) error {
-	_type = strings.ToLower(_type)
-	if d.typeToFn[_type] != nil {
-		return fmt.Errorf("[%s] is already registered", _type)
+func (d *DecodeFactory) Register(format string, fn model.Decode) model.Error {
+	const defaultErrKey = "Register"
+	if fn == nil {
+		return model.BuildError(defaultErrKey, errors.New("Decode is nil"))
 	}
-	d.typeToFn[_type] = fn
+	format = strings.ToLower(format)
+	if d.typeToFn[format] != nil {
+		return model.BuildError(defaultErrKey, fmt.Errorf("[%s] is already registered", format))
+	}
+	d.typeToFn[format] = fn
 	return nil
 }
 
 // Get gets a factory function based on a type
-func (d *DecoderFactory) Get(_type string) (DecoderFn, error) {
-	_type = strings.ToLower(_type)
-	if d.typeToFn[_type] == nil {
-		return nil, fmt.Errorf("[%s] is not registered", _type)
+func (d *DecodeFactory) Get(format string) (model.Decode, model.Error) {
+	const defaultErrKey = "Get"
+	format = strings.ToLower(format)
+	if d.typeToFn[format] == nil {
+		return nil, model.BuildError(defaultErrKey, fmt.Errorf("[%s] is not registered", format))
 	}
-	return d.typeToFn[_type], nil
+	return d.typeToFn[format], nil
 }
 
-// NewDecoderFactory initializes factory Decoder
-func NewDecoderFactory() *DecoderFactory {
-	return &DecoderFactory{
-		typeToFn: make(map[string]DecoderFn),
+// NewDecodeFactory initializes factory Decode
+func NewDecodeFactory() *DecodeFactory {
+	return &DecodeFactory{
+		typeToFn: make(map[string]model.Decode),
 	}
 }

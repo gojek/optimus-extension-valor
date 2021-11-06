@@ -5,7 +5,6 @@ import (
 	"io/ioutil"
 
 	"github.com/gojek/optimus-extension-valor/model"
-	"github.com/gojek/optimus-extension-valor/plugin"
 	"github.com/gojek/optimus-extension-valor/registry/io"
 )
 
@@ -13,43 +12,65 @@ const _type = "file"
 
 // File represents file operation
 type File struct {
-	read bool
-
-	path     string
-	metadata map[string]string
+	getPath     model.GetPath
+	postProcess model.PostProcess
 }
 
-func (f *File) Read() (*model.Data, error) {
-	if !f.Next() {
-		return nil, errors.New("no available Next item")
+// ReadOne reads one file from a path
+func (f *File) ReadOne() (*model.Data, model.Error) {
+	const defaultErrKey = "ReadOne"
+	if err := f.validate(); err != nil {
+		return nil, model.BuildError(defaultErrKey, err)
 	}
-	content, err := ioutil.ReadFile(f.path)
+	path := f.getPath()
+	content, err := ioutil.ReadFile(path)
 	if err != nil {
-		return nil, err
+		return nil, model.BuildError(defaultErrKey, err)
 	}
-	f.read = true
-	return &model.Data{
-		Path:     f.path,
-		Content:  content,
-		Metadata: f.metadata,
-	}, nil
+	return f.postProcess(path, content)
 }
 
-// Next checks whether there is an item to Read or not
-func (f *File) Next() bool {
-	return !f.read
+// ReadAll reads one file from a path but is returned as a slice
+func (f *File) ReadAll() ([]*model.Data, model.Error) {
+	const defaultErrKey = "ReadAll"
+	if err := f.validate(); err != nil {
+		return nil, model.BuildError(defaultErrKey, err)
+	}
+	data, err := f.ReadOne()
+	if err != nil {
+		return nil, model.BuildError(defaultErrKey, err)
+	}
+	return []*model.Data{data}, nil
+}
+
+func (f *File) validate() model.Error {
+	const defaultErrKey = "validate"
+	if f.getPath == nil {
+		return model.BuildError(defaultErrKey, errors.New("getPath is nil"))
+	}
+	if f.postProcess == nil {
+		return model.BuildError(defaultErrKey, errors.New("postProcess is nil"))
+	}
+	return nil
 }
 
 // New initializes File based on path
-func New(path string, metadata map[string]string) *File {
+func New(getPath model.GetPath, postProcess model.PostProcess) *File {
 	return &File{
-		path:     path,
-		metadata: metadata,
+		getPath:     getPath,
+		postProcess: postProcess,
 	}
 }
 
 func init() {
-	io.Readers.Register("file", func(path string, metadata map[string]string) plugin.Reader {
-		return New(path, metadata)
+	err := io.Readers.Register(_type, func(
+		getPath model.GetPath,
+		filterPath model.FilterPath,
+		postProcess model.PostProcess,
+	) model.Reader {
+		return New(getPath, postProcess)
 	})
+	if err != nil {
+		panic(err)
+	}
 }

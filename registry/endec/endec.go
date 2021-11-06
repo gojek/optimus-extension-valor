@@ -1,7 +1,7 @@
 package endec
 
-// Decoders is a factory for decoder
-var Decoders = NewDecoderFactory()
+// Decodes is a factory for decode
+var Decodes = NewDecodeFactory()
 
-// Encoders is a factory for decoder
-var Encoders = NewEncoderFactory()
+// Encodes is a factory for encode
+var Encodes = NewEncodeFactory()

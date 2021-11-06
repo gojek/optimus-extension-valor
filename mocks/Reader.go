@@ -12,22 +12,33 @@ type Reader struct {
 	mock.Mock
 }
 
-// Next provides a mock function with given fields:
-func (_m *Reader) Next() bool {
+// ReadAll provides a mock function with given fields:
+func (_m *Reader) ReadAll() ([]*model.Data, model.Error) {
 	ret := _m.Called()
 
-	var r0 bool
-	if rf, ok := ret.Get(0).(func() bool); ok {
+	var r0 []*model.Data
+	if rf, ok := ret.Get(0).(func() []*model.Data); ok {
 		r0 = rf()
 	} else {
-		r0 = ret.Get(0).(bool)
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]*model.Data)
+		}
 	}
 
-	return r0
+	var r1 model.Error
+	if rf, ok := ret.Get(1).(func() model.Error); ok {
+		r1 = rf()
+	} else {
+		if ret.Get(1) != nil {
+			r1 = ret.Get(1).(model.Error)
+		}
+	}
+
+	return r0, r1
 }
 
-// Read provides a mock function with given fields:
-func (_m *Reader) Read() (*model.Data, error) {
+// ReadOne provides a mock function with given fields:
+func (_m *Reader) ReadOne() (*model.Data, model.Error) {
 	ret := _m.Called()
 
 	var r0 *model.Data
@@ -39,11 +50,13 @@ func (_m *Reader) Read() (*model.Data, error) {
 		}
 	}
 
-	var r1 error
-	if rf, ok := ret.Get(1).(func() error); ok {
+	var r1 model.Error
+	if rf, ok := ret.Get(1).(func() model.Error); ok {
 		r1 = rf()
 	} else {
-		r1 = ret.Error(1)
+		if ret.Get(1) != nil {
+			r1 = ret.Get(1).(model.Error)
+		}
 	}
 
 	return r0, r1

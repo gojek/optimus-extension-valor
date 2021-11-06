@@ -4,26 +4,27 @@ import (
 	"bytes"
 	"errors"
 
-	"github.com/gojek/optimus-extension-valor/plugin"
+	"github.com/gojek/optimus-extension-valor/model"
 )
 
-// LoadWithReader loads recipe from the passed Reader with Decoder to decode
-func LoadWithReader(reader plugin.Reader, decoder plugin.Decoder) (*Recipe, error) {
+// Load loads recipe from the passed Reader with Decoder to decode
+func Load(reader model.Reader, decode model.Decode) (*Recipe, model.Error) {
+	const defaultErrKey = "Load"
 	if reader == nil {
-		return nil, errors.New("reader is nil")
+		return nil, model.BuildError(defaultErrKey, errors.New("reader is nil"))
 	}
-	if decoder == nil {
-		return nil, errors.New("decoder is nil")
+	if decode == nil {
+		return nil, model.BuildError(defaultErrKey, errors.New("decode is nil"))
 	}
-	data, err := reader.Read()
+	data, err := reader.ReadOne()
 	if err != nil {
 		return nil, err
 	}
 	if len(bytes.TrimSpace(data.Content)) == 0 {
-		return nil, errors.New("content is empty")
+		return nil, model.BuildError(defaultErrKey, errors.New("content is empty"))
 	}
 	output := &Recipe{}
-	err = decoder(data.Content, output)
+	err = decode(data.Content, output)
 	if err != nil {
 		return nil, err
 	}
