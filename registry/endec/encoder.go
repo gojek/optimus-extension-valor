@@ -1,42 +1,45 @@
 package endec
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
-	"github.com/gojek/optimus-extension-valor/plugin"
+	"github.com/gojek/optimus-extension-valor/model"
 )
 
-// EncoderFn is a getter for Encoder instance
-type EncoderFn func() plugin.Encoder
-
-// EncoderFactory is a factory for Encoder
-type EncoderFactory struct {
-	typeToFn map[string]EncoderFn
+// EncodeFactory is a factory for Encode
+type EncodeFactory struct {
+	typeToFn map[string]model.Encode
 }
 
 // Register registers a factory function for a type
-func (e *EncoderFactory) Register(_type string, fn EncoderFn) error {
+func (e *EncodeFactory) Register(_type string, fn model.Encode) model.Error {
+	const defaultErrKey = "Register"
+	if fn == nil {
+		return model.BuildError(defaultErrKey, errors.New("Encode is nil"))
+	}
 	_type = strings.ToLower(_type)
 	if e.typeToFn[_type] != nil {
-		return fmt.Errorf("[%s] is already registered", _type)
+		return model.BuildError(defaultErrKey, fmt.Errorf("[%s] is already registered", _type))
 	}
 	e.typeToFn[_type] = fn
 	return nil
 }
 
 // Get gets a factory function based on a type
-func (e *EncoderFactory) Get(_type string) (EncoderFn, error) {
+func (e *EncodeFactory) Get(_type string) (model.Encode, model.Error) {
+	const defaultErrKey = "Get"
 	_type = strings.ToLower(_type)
 	if e.typeToFn[_type] == nil {
-		return nil, fmt.Errorf("[%s] is not registered", _type)
+		return nil, model.BuildError(defaultErrKey, fmt.Errorf("[%s] is not registered", _type))
 	}
 	return e.typeToFn[_type], nil
 }
 
-// NewEncoderFactory initializes factory Encoder
-func NewEncoderFactory() *EncoderFactory {
-	return &EncoderFactory{
-		typeToFn: make(map[string]EncoderFn),
+// NewEncodeFactory initializes factory Encode
+func NewEncodeFactory() *EncodeFactory {
+	return &EncodeFactory{
+		typeToFn: make(map[string]model.Encode),
 	}
 }

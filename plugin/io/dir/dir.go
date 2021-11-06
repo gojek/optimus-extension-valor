@@ -8,139 +8,201 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"strings"
 
 	"github.com/gojek/optimus-extension-valor/model"
-	"github.com/gojek/optimus-extension-valor/plugin"
 	"github.com/gojek/optimus-extension-valor/registry/io"
 )
 
 const _type = "dir"
 
+// ContentWrapper is a wrapper for loading content via channel
+type ContentWrapper struct {
+	Content []byte
+	Error   model.Error
+}
+
 // Dir represents directory operation
 type Dir struct {
-	dirPath  string
-	metadata map[string]string
-
-	populated bool
-
-	filePathIndx int
-	filePaths    []string
+	getPath     model.GetPath
+	filterPath  model.FilterPath
+	postProcess model.PostProcess
 }
 
-func (d *Dir) Write(dataList ...*model.Data) error {
+func (d *Dir) Write(dataList ...*model.Data) model.Error {
+	const defaultErrKey = "Write"
 	if len(dataList) == 0 {
-		return errors.New("input is empty")
+		return model.BuildError(defaultErrKey, errors.New("data is empty"))
 	}
-	const pathKey = "path"
-	const extensionKey = "extension"
-	var missingDirKeys []string
-	if d.metadata[pathKey] == "" {
-		missingDirKeys = append(missingDirKeys, pathKey)
+	writeChans := make([]chan error, len(dataList))
+	for i, data := range dataList {
+		ch := make(chan error)
+		go func(c chan error, dt *model.Data) {
+			dirPath, _ := path.Split(dt.Path)
+			if err := os.MkdirAll(dirPath, os.ModePerm); err != nil {
+				c <- err
+				return
+			}
+			if err := ioutil.WriteFile(dirPath, dt.Content, os.ModePerm); err != nil {
+				c <- err
+				return
+			}
+			c <- nil
+		}(ch, data)
+		writeChans[i] = ch
 	}
-	if d.metadata[extensionKey] == "" {
-		missingDirKeys = append(missingDirKeys, extensionKey)
-	}
-	if len(missingDirKeys) > 0 {
-		return fmt.Errorf("[%s] are empty in directory metadata", strings.Join(missingDirKeys, ", "))
-	}
-	for _, data := range dataList {
-		if data.Metadata[pathKey] == "" {
-			return fmt.Errorf("[%s] are empty in file metadata", pathKey)
-		}
-		separator := "/"
-		dirPath := d.dirPath
-		filePath := data.Path
-		extension := d.metadata[extensionKey]
-		path := path.Join(dirPath, fmt.Sprintf("%s.%s", filePath, extension))
-
-		splitFilePath := strings.Split(path, separator)
-		targetDirPath := strings.Join(splitFilePath[:len(splitFilePath)-1], separator)
-		if err := os.MkdirAll(targetDirPath, os.ModePerm); err != nil {
-			return err
-		}
-		if err := ioutil.WriteFile(path, data.Content, os.ModePerm); err != nil {
-			return err
+	output := make(model.Error)
+	for i, ch := range writeChans {
+		err := <-ch
+		if err != nil {
+			key := fmt.Sprintf("%s [%s]", defaultErrKey, dataList[i].Path)
+			output[key] = err
 		}
 	}
-	return nil
-}
-
-func (d *Dir) Read() (*model.Data, error) {
-	if !d.populated {
-		if err := d.populate(); err != nil {
-			return nil, err
-		}
-	}
-	if !d.Next() {
-		return nil, errors.New("no available Next item")
-	}
-	path := d.filePaths[d.filePathIndx]
-	content, err := ioutil.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-	d.filePathIndx++
-	return &model.Data{
-		Path:     path,
-		Content:  content,
-		Metadata: d.generateNewMetadata(),
-	}, nil
-}
-
-func (d *Dir) generateNewMetadata() map[string]string {
-	output := make(map[string]string)
-	targetKey := "type"
-	targetValue := "file"
-	for key, value := range d.metadata {
-		if key == targetKey {
-			value = targetValue
-		}
-		output[key] = value
+	if len(output) == 0 {
+		output = nil
 	}
 	return output
 }
 
-func (d *Dir) populate() error {
-	var filePaths []string
-	err := filepath.Walk(d.dirPath, func(path string, info fs.FileInfo, err error) error {
+// ReadAll reads all files in a directory
+func (d *Dir) ReadAll() ([]*model.Data, model.Error) {
+	const defaultErrKey = "ReadAll"
+	if err := d.validate(); err != nil {
+		return nil, model.BuildError(defaultErrKey, err)
+	}
+	dirPath := d.getPath()
+	filePaths, err := d.getFilePaths(dirPath, d.filterPath)
+	if err != nil {
+		return nil, model.BuildError(defaultErrKey, err)
+	}
+	readChans := d.dispatchRead(filePaths)
+	outputData := make([]*model.Data, len(readChans))
+	outputError := make(model.Error)
+	for i, ch := range readChans {
+		path := filePaths[i]
+		key := fmt.Sprintf("%s [%s]", defaultErrKey, path)
+		readWrapper := <-ch
+		if readWrapper.Error != nil {
+			outputError[key] = readWrapper.Error
+			continue
+		}
+		data, err := d.postProcess(path, readWrapper.Content)
+		if err != nil {
+			outputError[key] = err
+		}
+		outputData[i] = data
+	}
+	if len(outputError) > 0 {
+		return nil, outputError
+	}
+	return outputData, nil
+}
+
+func (d *Dir) dispatchRead(filePaths []string) []chan *ContentWrapper {
+	const defaultErrKey = "dispatchRead"
+	readChans := make([]chan *ContentWrapper, len(filePaths))
+	for i, path := range filePaths {
+		ch := make(chan *ContentWrapper)
+		go func(c chan *ContentWrapper, p string) {
+			content, err := ioutil.ReadFile(p)
+			if err != nil {
+				c <- &ContentWrapper{
+					Error: model.BuildError(defaultErrKey, err),
+				}
+			} else {
+				c <- &ContentWrapper{
+					Content: content,
+				}
+			}
+		}(ch, path)
+		readChans[i] = ch
+	}
+	return readChans
+}
+
+// ReadOne reads the first file in a directory
+func (d *Dir) ReadOne() (*model.Data, model.Error) {
+	const defaultErrKey = "ReadOne"
+	if err := d.validate(); err != nil {
+		return nil, model.BuildError(defaultErrKey, err)
+	}
+	dirPath := d.getPath()
+	filePaths, pathErr := d.getFilePaths(dirPath, d.filterPath)
+	if pathErr != nil {
+		return nil, model.BuildError(defaultErrKey, pathErr)
+	}
+	content, readErr := ioutil.ReadFile(filePaths[0])
+	if readErr != nil {
+		return nil, model.BuildError(defaultErrKey, readErr)
+	}
+	return d.postProcess(filePaths[0], content)
+}
+
+func (d *Dir) getFilePaths(dirPath string, filterPath model.FilterPath) ([]string, model.Error) {
+	const defaultErrKey = "getFilePaths"
+	var output []string
+	err := filepath.Walk(dirPath, func(path string, info fs.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
 		if !info.IsDir() {
-			filePaths = append(filePaths, path)
+			if filterPath == nil || filterPath(path) {
+				output = append(output, path)
+			}
 		}
 		return nil
 	})
 	if err != nil {
-		return err
+		return nil, model.BuildError(defaultErrKey, err)
 	}
-	d.filePaths = filePaths
-	d.populated = true
+	if len(output) == 0 {
+		return nil, model.BuildError(defaultErrKey, errors.New("no file path is found based on filter"))
+	}
+	return output, nil
+}
+
+func (d *Dir) validate() model.Error {
+	const defaultErrKey = "validate"
+	if d.getPath == nil {
+		return model.BuildError(defaultErrKey, errors.New("getPath is nil"))
+	}
+	if d.postProcess == nil {
+		return model.BuildError(defaultErrKey, errors.New("postProcess is nil"))
+	}
 	return nil
 }
 
-// Next checks whether there is a next item to Read or not
-func (d *Dir) Next() bool {
-	if !d.populated {
-		return true
+// NewReader initializes dir Reader
+func NewReader(
+	getPath model.GetPath,
+	filterPath model.FilterPath,
+	postProcess model.PostProcess,
+) *Dir {
+	return &Dir{
+		getPath:     getPath,
+		filterPath:  filterPath,
+		postProcess: postProcess,
 	}
-	return d.filePathIndx < len(d.filePaths)
 }
 
-// New initializes Dir based on path
-func New(dirPath string, metadata map[string]string) *Dir {
-	return &Dir{
-		dirPath:  dirPath,
-		metadata: metadata,
-	}
+// NewWriter initializes dir Writer
+func NewWriter() *Dir {
+	return &Dir{}
 }
 
 func init() {
-	io.Readers.Register(_type, func(path string, metadata map[string]string) plugin.Reader {
-		return New(path, metadata)
+	err := io.Readers.Register(_type, func(
+		getPath model.GetPath,
+		filterPath model.FilterPath,
+		postProcess model.PostProcess,
+	) model.Reader {
+		return NewReader(getPath, filterPath, postProcess)
 	})
-	io.Writers.Register(_type, func(path string, metadata map[string]string) plugin.Writer {
-		return New(path, metadata)
-	})
+	if err != nil {
+		panic(err)
+	}
+	err = io.Writers.Register(_type, NewWriter())
+	if err != nil {
+		panic(err)
+	}
 }

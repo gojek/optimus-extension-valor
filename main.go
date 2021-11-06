@@ -4,6 +4,7 @@ import (
 	"os"
 
 	"github.com/gojek/optimus-extension-valor/core"
+	"github.com/gojek/optimus-extension-valor/model"
 	_ "github.com/gojek/optimus-extension-valor/plugin/endec"
 	_ "github.com/gojek/optimus-extension-valor/plugin/formatter"
 	_ "github.com/gojek/optimus-extension-valor/plugin/io"
@@ -14,7 +15,10 @@ import (
 	"github.com/go-playground/validator/v10"
 )
 
-var defaultPath = "./valor.yaml"
+const (
+	defaultPath = "./valor.yaml"
+	decoderType = "yaml"
+)
 
 func main() {
 	var args []string
@@ -22,26 +26,32 @@ func main() {
 		args = append(args, os.Args[1])
 	}
 	rcp := loadRecipe()
+	writer := getErrorWriter()
+
 	eval, err := core.NewPipeline(rcp)
 	if err != nil {
-		panic(err)
-	}
-	err = eval.Load()
-	if err != nil {
-		panic(err)
-	}
-	err = eval.Build()
-	if err != nil {
-		panic(err)
+		writeError(writer, err)
 	}
 	err = eval.Execute()
 	if err != nil {
-		panic(err)
+		writeError(writer, err)
 	}
-	err = eval.Flush()
+}
+
+func writeError(writer model.Writer, err model.Error) {
+	data := &model.Data{
+		Content: err.JSON(),
+	}
+	writer.Write(data)
+	os.Exit(1)
+}
+
+func getErrorWriter() model.Writer {
+	writer, err := io.Writers.Get("std")
 	if err != nil {
 		panic(err)
 	}
+	return writer
 }
 
 func loadRecipe() *recipe.Recipe {
@@ -50,14 +60,25 @@ func loadRecipe() *recipe.Recipe {
 	if err != nil {
 		panic(err)
 	}
-	reader := fnReader(defaultPath, nil)
-	decoderType := "yaml"
-	fnDecoder, err := endec.Decoders.Get(decoderType)
+	getPath := func() string {
+		return defaultPath
+	}
+	filterPath := func(path string) bool {
+		return true
+	}
+	postProcess := func(path string, content []byte) (*model.Data, model.Error) {
+		return &model.Data{
+			Content: content,
+			Path:    path,
+			Type:    readerType,
+		}, nil
+	}
+	reader := fnReader(getPath, filterPath, postProcess)
+	decode, err := endec.Decodes.Get(decoderType)
 	if err != nil {
 		panic(err)
 	}
-	decoder := fnDecoder()
-	rcp, err := recipe.LoadWithReader(reader, decoder)
+	rcp, err := recipe.Load(reader, decode)
 	if err != nil {
 		panic(err)
 	}

@@ -1,47 +1,53 @@
 package formatter
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
-	"github.com/gojek/optimus-extension-valor/plugin"
+	"github.com/gojek/optimus-extension-valor/model"
 )
 
-// Formatters is a factory for Formatter
-var Formatters = NewFactory()
+// Formats is a factory for Format
+var Formats = NewFactory()
 
 // Factory is a factory for Formatter
 type Factory struct {
-	srcToDestToFn map[string]map[string]plugin.Formatter
+	srcToDestToFn map[string]map[string]model.Format
 }
 
 // Register registers a factory function for a specified source and destination
-func (r *Factory) Register(src, dest string, fn plugin.Formatter) error {
+func (f *Factory) Register(src, dest string, fn model.Format) model.Error {
+	const defaultErrKey = "Register"
+	if fn == nil {
+		return model.BuildError(defaultErrKey, errors.New("Format is nil"))
+	}
 	src = strings.ToLower(src)
 	dest = strings.ToLower(dest)
-	if r.srcToDestToFn[src] != nil && r.srcToDestToFn[src][dest] != nil {
-		return fmt.Errorf("[source: %s | target: %s] is already registered", src, dest)
+	if f.srcToDestToFn[src] != nil && f.srcToDestToFn[src][dest] != nil {
+		return model.BuildError(defaultErrKey, fmt.Errorf("[source: %s | target: %s] is already registered", src, dest))
 	}
-	if r.srcToDestToFn[src] == nil {
-		r.srcToDestToFn[src] = make(map[string]plugin.Formatter)
+	if f.srcToDestToFn[src] == nil {
+		f.srcToDestToFn[src] = make(map[string]model.Format)
 	}
-	r.srcToDestToFn[src][dest] = fn
+	f.srcToDestToFn[src][dest] = fn
 	return nil
 }
 
 // Get gets a factory function based on a specified source and destination
-func (r *Factory) Get(src, dest string) (plugin.Formatter, error) {
+func (f *Factory) Get(src, dest string) (model.Format, model.Error) {
+	const defaultErrKey = "Get"
 	src = strings.ToLower(src)
 	dest = strings.ToLower(dest)
-	if r.srcToDestToFn[src] == nil || r.srcToDestToFn[src][dest] == nil {
-		return nil, fmt.Errorf("[source: %s | target: %s] is not registered", src, dest)
+	if f.srcToDestToFn[src] == nil || f.srcToDestToFn[src][dest] == nil {
+		return nil, model.BuildError(defaultErrKey, fmt.Errorf("[source: %s | target: %s] is not registered", src, dest))
 	}
-	return r.srcToDestToFn[src][dest], nil
+	return f.srcToDestToFn[src][dest], nil
 }
 
 // NewFactory initializes factory Formatter
 func NewFactory() *Factory {
 	return &Factory{
-		srcToDestToFn: make(map[string]map[string]plugin.Formatter),
+		srcToDestToFn: make(map[string]map[string]model.Format),
 	}
 }

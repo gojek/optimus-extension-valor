@@ -3,446 +3,255 @@ package core
 import (
 	"errors"
 	"fmt"
-	"strings"
+	"path"
 
 	"github.com/gojek/optimus-extension-valor/model"
 	"github.com/gojek/optimus-extension-valor/recipe"
 	"github.com/gojek/optimus-extension-valor/registry/formatter"
 	"github.com/gojek/optimus-extension-valor/registry/io"
+
+	"github.com/google/go-jsonnet"
 )
 
 const (
-	defaultFormat = "json"
-	skipResult    = "null\n"
+	jsonFormat    = "json"
+	jsonnetFormat = "jsonnet"
 )
 
-var isNotToFormat = map[string]bool{
-	"json":    true,
-	"jsonnet": true,
+var skipReformat = map[string]bool{
+	jsonFormat:    true,
+	jsonnetFormat: true,
 }
 
-var logPrefix = strings.Repeat("=", 48)
-var logSuffix = strings.Repeat("=", 48)
+type evaluateWrapper struct {
+	Result string
+	Error  model.Error
+}
 
-// Pipeline holds information on how a pipeline is executed
+// Pipeline defines how a pipeline is executed
 type Pipeline struct {
 	recipe *recipe.Recipe
+	loader *Loader
+	vm     *jsonnet.VM
 
-	loaded    bool
-	built     bool
-	evaluated bool
-
-	nameToFramework        map[string]*Framework
-	frameworkNameToSnippet map[string]*Snippet
-
-	resourceList []*Resource
-
-	schemaRstList       []*schemaResult
-	procedureRstList    []*procedureResult
-	pipelineBusinessErr bool
-	pipelineExecErr     bool
-}
-
-// Flush flushes pipeline results based on output
-func (p *Pipeline) Flush() error {
-	if !p.evaluated {
-		return errors.New("pipeline is not executed")
-	}
-
-	fmt.Printf("%s Flushing Output %s\n", logPrefix, logSuffix)
-	if len(p.schemaRstList) > 0 {
-		schemaOutputMap := p.schemaRstListToOutputMap(p.schemaRstList)
-		err := p.flushOutput("schema", schemaOutputMap)
-		if err != nil {
-			return err
-		}
-	}
-	procedureOutputMap := p.procedureRstListToOutputMap(p.procedureRstList)
-	if len(p.procedureRstList) > 0 {
-		err := p.flushOutput("procedure", procedureOutputMap)
-		if err != nil {
-			return err
-		}
-	}
-
-	if p.pipelineExecErr {
-		fmt.Printf("%s Finished with Execution Error %s\n", logPrefix, logSuffix)
-		return errors.New("execution error encountered")
-	} else if p.pipelineBusinessErr {
-		fmt.Printf("%s Finished with Business Error %s\n", logPrefix, logSuffix)
-		return errors.New("business error encountered")
-	} else {
-		fmt.Printf("%s Finished Successfully %s\n", logPrefix, logSuffix)
-	}
-	fmt.Println()
-	return nil
-}
-
-func (p *Pipeline) flushOutput(key string, outputMap map[*recipe.Metadata][]*model.Data) error {
-	var outputErrors []error
-	for output, listOfData := range outputMap {
-		updatedListOfData := make([]*model.Data, len(listOfData))
-		for i, d := range listOfData {
-			formatterFn, err := formatter.Formatters.Get(defaultFormat, output.Format)
-			if err != nil {
-				newErr := fmt.Errorf("getting formatter: %v", err)
-				outputErrors = append(outputErrors, newErr)
-				continue
-			}
-			content, err := formatterFn(d.Content)
-			if err != nil {
-				newErr := fmt.Errorf("formatting content from [%s] to [%s]: %v",
-					defaultFormat, output.Format, err,
-				)
-				outputErrors = append(outputErrors, newErr)
-				continue
-			}
-			updatedListOfData[i] = &model.Data{
-				Path:     d.Path,
-				Content:  content,
-				Metadata: d.Metadata,
-			}
-		}
-		if len(outputErrors) > 0 {
-			continue
-		}
-		writerFn, err := io.Writers.Get(output.Type)
-		if err != nil {
-			newErr := fmt.Errorf("getting writer [%s]: %v", output.Type, err)
-			outputErrors = append(outputErrors, newErr)
-			continue
-		}
-		writer := writerFn(output.Path, map[string]string{
-			"type":      output.Type,
-			"name":      output.Name,
-			"path":      output.Path,
-			"extension": output.Format,
-		})
-		err = writer.Write(updatedListOfData...)
-		if err != nil {
-			newErr := fmt.Errorf("writing list of data: %v", err)
-			outputErrors = append(outputErrors, newErr)
-		}
-	}
-	if len(outputErrors) > 0 {
-		printErrors(outputErrors)
-		return errors.New("one or more errors are encountered")
-	}
-	return nil
-}
-
-func (p *Pipeline) procedureRstListToOutputMap(procedureRstList []*procedureResult) map[*recipe.Metadata][]*model.Data {
-	outputMap := make(map[*recipe.Metadata][]*model.Data)
-	for _, procedureRst := range procedureRstList {
-		output := p.resultToOutput(procedureRst)
-		for _, o := range procedureRst.outputTargets {
-			outputMap[o] = append(outputMap[o], output)
-		}
-	}
-	return outputMap
-}
-
-func (p *Pipeline) schemaRstListToOutputMap(schemaRstList []*schemaResult) map[*recipe.Metadata][]*model.Data {
-	outputMap := make(map[*recipe.Metadata][]*model.Data)
-	for _, schemaRst := range schemaRstList {
-		output := p.resultToOutput(schemaRst)
-		for _, o := range schemaRst.outputTargets {
-			outputMap[o] = append(outputMap[o], output)
-		}
-	}
-	return outputMap
-}
-
-func (p *Pipeline) resultToOutput(result interface{}) *model.Data {
-	var path string
-	var content []byte
-	var metadata map[string]string
-	if schemaRst, ok := result.(*schemaResult); ok {
-		path = schemaRst.record.Path
-		metadata = schemaRst.record.Metadata
-		if schemaRst.err != nil {
-			content = []byte(fmt.Sprintf("%#v", schemaRst.err))
-		} else {
-			content = schemaRst.result
-		}
-	} else {
-		procedureRst := result.(*procedureResult)
-		path = procedureRst.record.Path
-		metadata = procedureRst.record.Metadata
-		if procedureRst.err != nil {
-			content = []byte(procedureRst.err.Error())
-		} else {
-			content = procedureRst.result
-		}
-	}
-	return &model.Data{
-		Path:     path,
-		Content:  content,
-		Metadata: metadata,
-	}
-}
-
-// Execute executes pipeline process
-func (p *Pipeline) Execute() error {
-	if !p.built {
-		return errors.New("pipeline is not built")
-	}
-
-	fmt.Printf("%s Evaluating Resource %s\n", logPrefix, logSuffix)
-	p.evaluated = true
-	var schemaRstList []*schemaResult
-	var procedureRstList []*procedureResult
-	pipelineExecErr := false
-	pipelineBusinessErr := false
-	for _, resource := range p.resourceList {
-		resourceExecErr := false
-		resourceBusinessErr := false
-		for _, frwrkName := range resource.frameworkNames {
-			framework := p.nameToFramework[frwrkName]
-			if framework == nil {
-				return fmt.Errorf("framework [%s] for resource [%s] is unknown", frwrkName, resource.container.name)
-			}
-			schemaExecErr := false
-			schemaBusinessErr := false
-			for _, schema := range framework.schemas {
-				for _, schemaData := range schema.data {
-					name := fmt.Sprintf("%s: %s", schema.name, schemaData.Path)
-					progress := NewProgress(name, len(resource.container.data))
-					for _, record := range resource.container.data {
-						rst, err := ValidateSchema(schemaData.Content, record.Content)
-						schemaRst := &schemaResult{
-							record:        record,
-							schema:        schemaData,
-							result:        rst,
-							err:           err,
-							outputTargets: framework.outputTargets,
-						}
-						if err != nil {
-							schemaExecErr = true
-						}
-						if err != nil || len(rst) > 0 {
-							if schema.outputIsError {
-								schemaBusinessErr = true
-							}
-							schemaRstList = append(schemaRstList, schemaRst)
-						}
-						progress.Increment()
-					}
-					progress.Wait()
-				}
-			}
-			if schemaExecErr {
-				resourceExecErr = true
-				break
-			}
-			if schemaBusinessErr {
-				resourceBusinessErr = true
-				if !framework.allowError {
-					break
-				}
-			}
-
-			snippet := p.frameworkNameToSnippet[framework.name]
-			procedureExecErr := false
-			procedureBusinessErr := false
-			for _, procedure := range framework.procedures {
-				procedureSnippet, err := snippet.GetByProcedure(procedure.name)
-				if err != nil {
-					return err
-				}
-				progress := NewProgress(procedure.name, len(resource.container.data))
-				for _, record := range resource.container.data {
-					recordSnippet := fmt.Sprintf("local %s = %s;", resource.container.name, string(record.Content))
-					completeSnippet := recordSnippet + "\n" + procedureSnippet
-					rst, err := Evaluate(resource.container.name, completeSnippet)
-					procedureRst := &procedureResult{
-						record:        record,
-						snippet:       completeSnippet,
-						result:        rst,
-						err:           err,
-						outputTargets: framework.outputTargets,
-					}
-					if err != nil {
-						procedureExecErr = true
-					}
-					if err != nil || len(rst) > 0 && string(rst) != skipResult {
-						outputIsError, err := snippet.OutputIsError(procedure.name)
-						if err != nil {
-							progress.Wait()
-							return err
-						}
-						if outputIsError {
-							procedureBusinessErr = true
-						}
-						procedureRstList = append(procedureRstList, procedureRst)
-					}
-					progress.Increment()
-				}
-				progress.Wait()
-			}
-			if procedureExecErr {
-				resourceExecErr = true
-				break
-			}
-			if procedureBusinessErr {
-				resourceBusinessErr = true
-				if !framework.allowError {
-					break
-				}
-			}
-		}
-		if resourceExecErr {
-			pipelineExecErr = true
-			break
-		}
-		if resourceBusinessErr {
-			pipelineBusinessErr = true
-			break
-		}
-	}
-
-	p.schemaRstList = schemaRstList
-	p.procedureRstList = procedureRstList
-	p.pipelineExecErr = pipelineExecErr
-	p.pipelineBusinessErr = pipelineBusinessErr
-
-	fmt.Printf("%s Finished Evaluating %s\n", logPrefix, logSuffix)
-	fmt.Println()
-	return nil
-}
-
-// Build builds the pipeline
-func (p *Pipeline) Build() error {
-	if p.built {
-		return errors.New("pipeline is already built")
-	}
-
-	fmt.Printf("%s Building Pipeline %s\n", logPrefix, logSuffix)
-	progress := NewProgress("building", len(p.nameToFramework))
-	frameworkNameToSnippet := make(map[string]*Snippet)
-	var buildingErrors []error
-	for name, framework := range p.nameToFramework {
-		snippet, err := NewSnippet(framework)
-		if err != nil {
-			buildingErrors = append(buildingErrors, err)
-			continue
-		}
-		frameworkNameToSnippet[name] = snippet
-		progress.Increment()
-	}
-	progress.Wait()
-
-	if len(buildingErrors) > 0 {
-		fmt.Printf("%s Errors encountered %s\n", logPrefix, logSuffix)
-		printErrors(buildingErrors)
-		return errors.New("one or more errors are encountered")
-	}
-	fmt.Printf("%s Finished Building %s\n", logPrefix, logSuffix)
-	fmt.Println()
-
-	p.frameworkNameToSnippet = frameworkNameToSnippet
-	p.built = true
-	return nil
-}
-
-// Load loads the required data based on recipe
-func (p *Pipeline) Load() error {
-	if p.loaded {
-		return errors.New("pipeline is already loaded")
-	}
-
-	fmt.Printf("%s Loading Pipeline %s\n", logPrefix, logSuffix)
-	resourceList, err := p.loadResourceList(p.recipe.Resources)
-	if err != nil {
-		return err
-	}
-	frameworkNameToRequired := p.getFrameworkNameToRequired(p.recipe.Resources)
-	nameToFramework, err := p.loadNameToFramework(p.recipe.Frameworks, frameworkNameToRequired)
-	if err != nil {
-		return err
-	}
-	fmt.Printf("%s Finished Loading %s\n", logPrefix, logSuffix)
-	fmt.Println()
-
-	p.resourceList = resourceList
-	p.nameToFramework = nameToFramework
-	p.loaded = true
-	return nil
-}
-
-func (p *Pipeline) loadNameToFramework(rcpFrameworks []*recipe.Framework, nameToRequired map[string]bool) (map[string]*Framework, error) {
-	progress := NewProgress("framework", len(rcpFrameworks))
-	var frameworkNames []string
-	nameToFramework := make(map[string]*Framework)
-	var frameworkErrors []error
-	for _, rcp := range rcpFrameworks {
-		progress.Increment()
-		if !nameToRequired[rcp.Name] {
-			continue
-		}
-		frmwrk, err := LoadFramework(rcp)
-		if err != nil {
-			newErr := fmt.Errorf("framework [%s]: %v", rcp.Name, err)
-			frameworkErrors = append(frameworkErrors, newErr)
-			continue
-		}
-		frameworkNames = append(frameworkNames, frmwrk.name)
-		nameToFramework[frmwrk.name] = frmwrk
-	}
-	progress.Wait()
-	if len(frameworkErrors) > 0 {
-		fmt.Printf("%s Errors encountered %s\n", logPrefix, logSuffix)
-		printErrors(frameworkErrors)
-		return nil, errors.New("one or more errors are encountered")
-	}
-	return nameToFramework, nil
-}
-
-func (p *Pipeline) getFrameworkNameToRequired(rcpResources []*recipe.Resource) map[string]bool {
-	output := make(map[string]bool)
-	for _, c := range rcpResources {
-		for _, name := range c.FrameworkNames {
-			output[name] = true
-		}
-	}
-	return output
-}
-
-func (p *Pipeline) loadResourceList(rcpResources []*recipe.Resource) ([]*Resource, error) {
-	progress := NewProgress("resource", len(rcpResources))
-	var resourceList []*Resource
-	var resourceErrors []error
-	for _, c := range rcpResources {
-		resource, err := LoadResource(c)
-		if err != nil {
-			newErr := fmt.Errorf("resource [%s]: %v", c.Name, err)
-			resourceErrors = append(resourceErrors, newErr)
-			continue
-		}
-		resourceList = append(resourceList, resource)
-		progress.Increment()
-	}
-	progress.Wait()
-	if len(resourceErrors) > 0 {
-		fmt.Printf("%s Errors encountered %s\n", logPrefix, logSuffix)
-		printErrors(resourceErrors)
-		return nil, errors.New("one or more errors are encountered")
-	}
-	return resourceList, nil
+	nameToFrameworkRecipe map[string]*recipe.Framework
 }
 
 // NewPipeline initializes pipeline process
-func NewPipeline(rcp *recipe.Recipe) (*Pipeline, error) {
+func NewPipeline(rcp *recipe.Recipe) (*Pipeline, model.Error) {
+	const defaultErrKey = "NewPipeline"
 	if rcp == nil {
-		return nil, errors.New("recipe is nil")
+		return nil, model.BuildError(defaultErrKey, errors.New("recipe is nil"))
+	}
+	nameToFrameworkRecipe := make(map[string]*recipe.Framework)
+	for _, frameworkRcp := range rcp.Frameworks {
+		nameToFrameworkRecipe[frameworkRcp.Name] = frameworkRcp
 	}
 	return &Pipeline{
-		recipe: rcp,
+		recipe:                rcp,
+		loader:                &Loader{},
+		vm:                    jsonnet.MakeVM(),
+		nameToFrameworkRecipe: nameToFrameworkRecipe,
 	}, nil
 }
 
-func printErrors(errs []error) {
-	for i, e := range errs {
-		fmt.Printf("[%d] %v\n", i, e)
+// Execute executes pipeline process
+func (p *Pipeline) Execute() model.Error {
+	const defaultErrKey = "Execute"
+	for _, resourceRcp := range p.recipe.Resources {
+		resource, err := p.loader.LoadResource(resourceRcp)
+		if err != nil {
+			return model.BuildError(defaultErrKey, err)
+		}
+		for _, frameworkName := range resource.FrameworkNames {
+			frameworkRcp := p.nameToFrameworkRecipe[frameworkName]
+			framework, err := p.loader.LoadFramework(frameworkRcp)
+			if err != nil {
+				return model.BuildError(defaultErrKey, err)
+			}
+			validator, err := NewValidator(framework)
+			if err != nil {
+				key := fmt.Sprintf("%s [%s]", defaultErrKey, frameworkName)
+				return model.BuildError(key, err)
+			}
+			validateChans := p.dispatchValidate(validator, resource.ListOfData)
+			outputError := make(model.Error)
+			for i, ch := range validateChans {
+				err := <-ch
+				if err != nil {
+					key := fmt.Sprintf("%s [%s: %s]", defaultErrKey, frameworkName, resource.ListOfData[i].Path)
+					outputError[key] = err
+				}
+			}
+			if len(outputError) > 0 {
+				return outputError
+			}
+			evaluator, err := NewEvaluator(framework, p.vm)
+			if err != nil {
+				key := fmt.Sprintf("%s [%s]", defaultErrKey, frameworkName)
+				return model.BuildError(key, err)
+			}
+			evalChans := p.dispatchEvaluate(evaluator, resource.ListOfData)
+			results := make([]string, len(resource.ListOfData))
+			for i, ch := range evalChans {
+				rst := <-ch
+				if rst.Error != nil {
+					key := fmt.Sprintf("%s [%s: %d]", defaultErrKey, frameworkName, i)
+					if resource.ListOfData[i] != nil {
+						key = fmt.Sprintf("%s [%s: %s]", defaultErrKey, frameworkName, resource.ListOfData[i].Path)
+					}
+					outputError[key] = rst.Error
+				}
+				results[i] = rst.Result
+			}
+			if len(outputError) > 0 {
+				return outputError
+			}
+			err = p.writeOutput(resource.ListOfData, results, framework.OutputTargets)
+			if err != nil {
+				return model.BuildError(defaultErrKey, err)
+			}
+		}
 	}
+	return nil
+}
+
+func (p *Pipeline) writeOutput(
+	resourceData []*model.Data, resourceResult []string,
+	outputTargets []*model.OutputTarget,
+) model.Error {
+	const defaultErrKey = "writeOutput"
+	formatters, err := p.getOutputFormatter(outputTargets)
+	if err != nil {
+		return model.BuildError(defaultErrKey, err)
+	}
+	writers, err := p.getOutputWriter(outputTargets)
+	if err != nil {
+		return model.BuildError(defaultErrKey, err)
+	}
+	writeChans := make([]chan model.Error, len(outputTargets))
+	for i := 0; i < len(outputTargets); i++ {
+		ch := make(chan model.Error)
+		go p.dispatchWrite(
+			ch,
+			resourceData, resourceResult,
+			formatters[i], writers[i],
+			outputTargets[i],
+		)
+		writeChans[i] = ch
+	}
+	outputError := make(model.Error)
+	for i := 0; i < len(outputTargets); i++ {
+		err := <-writeChans[i]
+		if err != nil {
+			key := fmt.Sprintf("%s [%s]", defaultErrKey, outputTargets[i].Name)
+			outputError[key] = err
+		}
+	}
+	if len(outputError) > 0 {
+		return outputError
+	}
+	return nil
+}
+
+func (p *Pipeline) dispatchWrite(
+	ch chan model.Error,
+	dataList []*model.Data, resultsList []string,
+	formatter model.Format, writter model.Writer,
+	t *model.OutputTarget) {
+	const key = "dispatchWrite"
+	writeErr := make(model.Error)
+	for i := 0; i < len(dataList); i++ {
+		content, err := formatter(dataList[i].Content)
+		if err != nil {
+			k := fmt.Sprintf("%s [%s]", key, dataList[i].Path)
+			writeErr[k] = err
+			continue
+		}
+		newData := &model.Data{
+			Type:    t.Type,
+			Path:    path.Join(t.Path, dataList[i].Path),
+			Content: content,
+		}
+		if err := writter.Write(newData); err != nil {
+			k := fmt.Sprintf("%s [%s]", key, dataList[i].Path)
+			writeErr[k] = err
+		}
+	}
+	if len(writeErr) > 0 {
+		ch <- writeErr
+	} else {
+		ch <- nil
+	}
+}
+
+func (p *Pipeline) getOutputWriter(target []*model.OutputTarget) ([]model.Writer, model.Error) {
+	const defaultErrKey = "getOutputFormatter"
+	outputWriter := make([]model.Writer, len(target))
+	outputError := make(model.Error)
+	for i, t := range target {
+		fn, err := io.Writers.Get(t.Type)
+		if err != nil {
+			key := fmt.Sprintf("%s [%d]", defaultErrKey, i)
+			outputError[key] = err
+			continue
+		}
+		outputWriter[i] = fn
+	}
+	if len(outputError) > 0 {
+		return nil, outputError
+	}
+	return outputWriter, nil
+}
+
+func (p *Pipeline) getOutputFormatter(target []*model.OutputTarget) ([]model.Format, model.Error) {
+	const defaultErrKey = "getOutputFormatter"
+	outputFormat := make([]model.Format, len(target))
+	outputError := make(model.Error)
+	for i, t := range target {
+		fn, err := formatter.Formats.Get(jsonFormat, t.Format)
+		if err != nil {
+			key := fmt.Sprintf("%s [%d]", defaultErrKey, i)
+			outputError[key] = err
+			continue
+		}
+		outputFormat[i] = fn
+	}
+	if len(outputError) > 0 {
+		return nil, outputError
+	}
+	return outputFormat, nil
+}
+
+func (p *Pipeline) dispatchEvaluate(evaluator *Evaluator, listOfData []*model.Data) []chan *evaluateWrapper {
+	evalChans := make([]chan *evaluateWrapper, len(listOfData))
+	for i, data := range listOfData {
+		ch := make(chan *evaluateWrapper)
+		go func(c chan *evaluateWrapper, e *Evaluator, d *model.Data) {
+			result, err := e.Evaluate(d)
+			if err != nil {
+				c <- &evaluateWrapper{
+					Error: err,
+				}
+			} else {
+				c <- &evaluateWrapper{
+					Result: result,
+				}
+			}
+		}(ch, evaluator, data)
+		evalChans[i] = ch
+	}
+	return evalChans
+}
+
+func (p *Pipeline) dispatchValidate(validator *Validator, listOfData []*model.Data) []chan model.Error {
+	validateChans := make([]chan model.Error, len(listOfData))
+	for i, data := range listOfData {
+		ch := make(chan model.Error)
+		go func(c chan model.Error, v *Validator, d *model.Data) {
+			c <- v.Validate(d)
+		}(ch, validator, data)
+		validateChans[i] = ch
+	}
+	return validateChans
 }
