@@ -43,7 +43,7 @@ func NewProgress(name string, total int) *Progress {
 		),
 		mpb.AppendDecorators(
 			decor.Percentage(decor.WCSyncSpace),
-			decor.OnComplete(decor.Name("processed"), "done"),
+			decor.Elapsed(decor.ET_STYLE_MMSS, decor.WCSyncSpace),
 		),
 	)
 	return &Progress{

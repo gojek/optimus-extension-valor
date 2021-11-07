@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"path"
+	"strings"
 
 	"github.com/gojek/optimus-extension-valor/model"
 	"github.com/gojek/optimus-extension-valor/recipe"
@@ -59,40 +60,57 @@ func NewPipeline(rcp *recipe.Recipe) (*Pipeline, model.Error) {
 func (p *Pipeline) Execute() model.Error {
 	const defaultErrKey = "Execute"
 	for _, resourceRcp := range p.recipe.Resources {
+		decorate := strings.Repeat("=", 12)
+		fmt.Printf("%s PROCESSING RESOURCE [%s] %s\n", decorate, resourceRcp.Name, decorate)
 		resource, err := p.loader.LoadResource(resourceRcp)
 		if err != nil {
 			return model.BuildError(defaultErrKey, err)
 		}
 		for _, frameworkName := range resource.FrameworkNames {
+			decoreate := strings.Repeat(":", 5)
+			fmt.Printf("%s Processing Framework [%s] %s\n", decoreate, frameworkName, decoreate)
 			frameworkRcp := p.nameToFrameworkRecipe[frameworkName]
+			fmt.Println(">> Loading framework")
 			framework, err := p.loader.LoadFramework(frameworkRcp)
 			if err != nil {
+				fmt.Println("  Loading failed <<")
 				return model.BuildError(defaultErrKey, err)
 			}
+			fmt.Println(">> Initializing valiator")
 			validator, err := NewValidator(framework)
 			if err != nil {
+				fmt.Println("  Initialization failed <<")
 				key := fmt.Sprintf("%s [%s]", defaultErrKey, frameworkName)
 				return model.BuildError(key, err)
 			}
+			fmt.Println(">> Dispatching validation")
 			validateChans := p.dispatchValidate(validator, resource.ListOfData)
 			outputError := make(model.Error)
+			valProgress := NewProgress("getting validation", len(validateChans))
 			for i, ch := range validateChans {
 				err := <-ch
 				if err != nil {
 					key := fmt.Sprintf("%s [%s: %s]", defaultErrKey, frameworkName, resource.ListOfData[i].Path)
 					outputError[key] = err
 				}
+				valProgress.Increment()
 			}
+			valProgress.Wait()
 			if len(outputError) > 0 {
+				fmt.Println("  Validation failed <<")
 				return outputError
 			}
+			fmt.Println(">> Initializing evaluator")
 			evaluator, err := NewEvaluator(framework, p.vm)
 			if err != nil {
+				fmt.Println("  Initialization failed <<")
 				key := fmt.Sprintf("%s [%s]", defaultErrKey, frameworkName)
 				return model.BuildError(key, err)
 			}
+			fmt.Println(">> Dispatching evaluation")
 			evalChans := p.dispatchEvaluate(evaluator, resource.ListOfData)
 			results := make([]string, len(resource.ListOfData))
+			evalProgress := NewProgress("getting evaluation", len(evalChans))
 			for i, ch := range evalChans {
 				rst := <-ch
 				if rst.Error != nil {
@@ -103,15 +121,21 @@ func (p *Pipeline) Execute() model.Error {
 					outputError[key] = rst.Error
 				}
 				results[i] = rst.Result
+				evalProgress.Increment()
 			}
+			evalProgress.Wait()
 			if len(outputError) > 0 {
+				fmt.Println("  Evaluation failed <<")
 				return outputError
 			}
+			fmt.Println(">> Writing output")
 			err = p.writeOutput(resource.ListOfData, results, framework.OutputTargets)
 			if err != nil {
+				fmt.Println("  Write failed <<")
 				return model.BuildError(defaultErrKey, err)
 			}
 		}
+		fmt.Println()
 	}
 	return nil
 }
@@ -224,6 +248,7 @@ func (p *Pipeline) getOutputFormatter(target []*model.OutputTarget) ([]model.For
 }
 
 func (p *Pipeline) dispatchEvaluate(evaluator *Evaluator, listOfData []*model.Data) []chan *evaluateWrapper {
+	progress := NewProgress("dispatch evaluation", len(listOfData))
 	evalChans := make([]chan *evaluateWrapper, len(listOfData))
 	for i, data := range listOfData {
 		ch := make(chan *evaluateWrapper)
@@ -240,11 +265,14 @@ func (p *Pipeline) dispatchEvaluate(evaluator *Evaluator, listOfData []*model.Da
 			}
 		}(ch, evaluator, data)
 		evalChans[i] = ch
+		progress.Increment()
 	}
+	progress.Wait()
 	return evalChans
 }
 
 func (p *Pipeline) dispatchValidate(validator *Validator, listOfData []*model.Data) []chan model.Error {
+	progress := NewProgress("dispatch validation", len(listOfData))
 	validateChans := make([]chan model.Error, len(listOfData))
 	for i, data := range listOfData {
 		ch := make(chan model.Error)
@@ -252,6 +280,8 @@ func (p *Pipeline) dispatchValidate(validator *Validator, listOfData []*model.Da
 			c <- v.Validate(d)
 		}(ch, validator, data)
 		validateChans[i] = ch
+		progress.Increment()
 	}
+	progress.Wait()
 	return validateChans
 }
