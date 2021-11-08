@@ -58,19 +58,3 @@ func BuildError(key string, value interface{}) Error {
 		key: value,
 	}
 }
-
-// CombineErrors combines Errors into one
-func CombineErrors(errs ...Error) Error {
-	output := make(Error)
-	for _, e := range errs {
-		for key, value := range e {
-			if value != nil {
-				output[key] = value
-			}
-		}
-	}
-	if len(output) > 0 {
-		return output
-	}
-	return nil
-}

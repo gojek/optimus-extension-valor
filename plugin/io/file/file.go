@@ -20,7 +20,7 @@ type File struct {
 func (f *File) ReadOne() (*model.Data, model.Error) {
 	const defaultErrKey = "ReadOne"
 	if err := f.validate(); err != nil {
-		return nil, model.BuildError(defaultErrKey, err)
+		return nil, err
 	}
 	path := f.getPath()
 	content, err := ioutil.ReadFile(path)
@@ -34,11 +34,11 @@ func (f *File) ReadOne() (*model.Data, model.Error) {
 func (f *File) ReadAll() ([]*model.Data, model.Error) {
 	const defaultErrKey = "ReadAll"
 	if err := f.validate(); err != nil {
-		return nil, model.BuildError(defaultErrKey, err)
+		return nil, err
 	}
 	data, err := f.ReadOne()
 	if err != nil {
-		return nil, model.BuildError(defaultErrKey, err)
+		return nil, err
 	}
 	return []*model.Data{data}, nil
 }

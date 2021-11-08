@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/gojek/optimus-extension-valor/model"
 	"github.com/gojek/optimus-extension-valor/registry/endec"
@@ -30,7 +31,7 @@ func NewEvaluator(framework *model.Framework, vm *jsonnet.VM) (*Evaluator, model
 	}
 	definitionSnippet, err := buildAllDefinitions(vm, framework.Definitions)
 	if err != nil {
-		return nil, model.BuildError(defaultErrKey, err)
+		return nil, err
 	}
 	return &Evaluator{
 		vm:                vm,
@@ -50,7 +51,7 @@ func (e *Evaluator) Evaluate(resourceData *model.Data) (string, model.Error) {
 	for _, procedure := range e.framework.Procedures {
 		snippet, err := buildSnippet(resourceSnippet, e.definitionSnippet, previousOutputSnippet, procedure)
 		if err != nil {
-			return model.SkipNullValue, model.BuildError(defaultErrKey, err)
+			return model.SkipNullValue, err
 		}
 		result, evalErr := e.vm.EvaluateAnonymousSnippet(procedure.Name, snippet)
 		if evalErr != nil {
@@ -61,7 +62,7 @@ func (e *Evaluator) Evaluate(resourceData *model.Data) (string, model.Error) {
 		} else {
 			evalResult := e.resultToError(result)
 			if procedure.OutputIsError {
-				return model.SkipNullValue, model.BuildError(defaultErrKey, evalResult)
+				return model.SkipNullValue, evalResult
 			}
 			previousOutputSnippet = result
 		}
@@ -73,46 +74,50 @@ func (e *Evaluator) resultToError(result string) model.Error {
 	const defaultErrKey = "resultToError"
 	fn, err := endec.Decodes.Get(jsonFormat)
 	if err != nil {
-		return model.BuildError(defaultErrKey, err)
+		return err
 	}
-	var output map[string]interface{}
-	if err = fn([]byte(result), &output); err != nil {
+	var tmp interface{}
+	if err = fn([]byte(result), &tmp); err != nil {
 		return model.BuildError(defaultErrKey, errors.New(result))
 	}
-	return e.castEvaluationResult(output)
-}
-
-func (e *Evaluator) castEvaluationResult(result map[string]interface{}) model.Error {
-	output := make([]model.Error, len(result))
-	for key, value := range result {
-		if castedValue, ok := value.(map[string]interface{}); ok {
-			childErr := e.castEvaluationResult(castedValue)
-			output = append(output, model.BuildError(key, childErr))
-		} else {
-			output = append(output, model.BuildError(key, fmt.Errorf("%v", value)))
-		}
-	}
-	return model.CombineErrors(output...)
+	return model.BuildError(defaultErrKey, tmp)
 }
 
 func buildAllDefinitions(vm *jsonnet.VM, definitions []*model.Definition) (string, model.Error) {
 	const defaultErrKey = "buildAllDefinitions"
+
+	wg := &sync.WaitGroup{}
+	mtx := &sync.Mutex{}
+
 	nameToSnippet := make(map[string]string)
-	errOutput := make(model.Error)
+	outputError := make(model.Error)
 	for i, def := range definitions {
-		defSnippet, err := buildOneDefinition(vm, def)
-		if err != nil {
-			key := fmt.Sprintf("%s [%d]", defaultErrKey, i)
-			if def != nil {
-				key = fmt.Sprintf("%s [%s]", defaultErrKey, def.Name)
+		wg.Add(1)
+
+		go func(idx int, v *jsonnet.VM, w *sync.WaitGroup, m *sync.Mutex, d *model.Definition) {
+			defer w.Done()
+
+			defSnippet, err := buildOneDefinition(v, d)
+			if err != nil {
+				key := fmt.Sprintf("%s [%d]", defaultErrKey, idx)
+				if d != nil {
+					key = fmt.Sprintf("%s [%s]", defaultErrKey, d.Name)
+				}
+				m.Lock()
+				outputError[key] = err
+				m.Unlock()
+			} else {
+				m.Lock()
+				nameToSnippet[d.Name] = defSnippet
+				m.Unlock()
 			}
-			errOutput[key] = err
-			continue
-		}
-		nameToSnippet[def.Name] = defSnippet
+		}(i, vm, wg, mtx, def)
+
 	}
-	if len(errOutput) > 0 {
-		return model.SkipNullValue, errOutput
+	wg.Wait()
+
+	if len(outputError) > 0 {
+		return model.SkipNullValue, outputError
 	}
 	var outputSnippets []string
 	for key, value := range nameToSnippet {

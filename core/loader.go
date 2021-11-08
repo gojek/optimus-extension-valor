@@ -4,30 +4,13 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/gojek/optimus-extension-valor/model"
 	"github.com/gojek/optimus-extension-valor/recipe"
 	"github.com/gojek/optimus-extension-valor/registry/formatter"
 	"github.com/gojek/optimus-extension-valor/registry/io"
 )
-
-// DefinitionWrapper is a wrapper for definition
-type DefinitionWrapper struct {
-	Definition *model.Definition
-	Error      model.Error
-}
-
-// SchemaWrapper is a wrapper for schema
-type SchemaWrapper struct {
-	Schema *model.Schema
-	Error  model.Error
-}
-
-// ProcedureWrapper is a wrapper for procedure
-type ProcedureWrapper struct {
-	Procedure *model.Procedure
-	Error     model.Error
-}
 
 // Loader is a loader management
 type Loader struct {
@@ -41,7 +24,7 @@ func (l *Loader) LoadResource(rcp *recipe.Resource) (*model.Resource, model.Erro
 	}
 	listOfData, err := l.loadAllData(rcp.Path, rcp.Type, rcp.Format)
 	if err != nil {
-		return nil, model.BuildError(defaultErrKey, err)
+		return nil, err
 	}
 	return &model.Resource{
 		Name:           rcp.Name,
@@ -56,17 +39,18 @@ func (l *Loader) LoadFramework(rcp *recipe.Framework) (*model.Framework, model.E
 	if rcp == nil {
 		return nil, model.BuildError(defaultErrKey, errors.New("framework recipe is nil"))
 	}
-	definitionChans := l.DispatchDefinitionChans(rcp.Definitions)
-	schemaChans := l.DispatchSchemaChans(rcp.Schemas)
-	procedureChans := l.DispatchProcedureChans(rcp.Procedures)
 
-	definitions, defError := l.acceptDefinitionChans(definitionChans)
-	schemas, schError := l.acceptSchemaChans(schemaChans)
-	procedures, proError := l.acceptProcedureChans(procedureChans)
-
-	errOutput := model.CombineErrors(defError, schError, proError)
-	if len(errOutput) > 0 {
-		return nil, errOutput
+	definitions, defError := l.loadAllDefinitions(rcp.Definitions)
+	if defError != nil {
+		return nil, defError
+	}
+	schemas, schError := l.loadAllSchemas(rcp.Schemas)
+	if schError != nil {
+		return nil, schError
+	}
+	procedures, proError := l.loadAllProcedures(rcp.Procedures)
+	if proError != nil {
+		return nil, proError
 	}
 	return &model.Framework{
 		Name:          rcp.Name,
@@ -90,124 +74,109 @@ func (l *Loader) convertOutputTargets(targets []*recipe.OutputTarget) []*model.O
 	return output
 }
 
-func (l *Loader) acceptDefinitionChans(definitionChans []chan *DefinitionWrapper) ([]*model.Definition, model.Error) {
-	const defaultErrKey = "acceptDefinitionChans"
-	definitions := make([]*model.Definition, len(definitionChans))
-	errOutput := make(model.Error)
-	for i, ch := range definitionChans {
-		defWrapper := <-ch
-		if defWrapper.Error != nil {
-			key := fmt.Sprintf("%s [%d]", defaultErrKey, i)
-			errOutput[key] = defWrapper.Error
-			continue
-		}
-		definitions[i] = defWrapper.Definition
-	}
-	return definitions, errOutput
-}
+func (l *Loader) loadAllDefinitions(rcps []*recipe.Definition) ([]*model.Definition, model.Error) {
+	const defaultErrKey = "loadAllDefinitions"
 
-func (l *Loader) acceptSchemaChans(schemaChans []chan *SchemaWrapper) ([]*model.Schema, model.Error) {
-	const defaultErrKey = "acceptSchemaChans"
-	schemas := make([]*model.Schema, len(schemaChans))
-	errOutput := make(model.Error)
-	for i, ch := range schemaChans {
-		schWrapper := <-ch
-		if schWrapper.Error != nil {
-			key := fmt.Sprintf("%s [%d]", defaultErrKey, i)
-			errOutput[key] = schWrapper.Error
-			continue
-		}
-		schemas[i] = schWrapper.Schema
-	}
-	return schemas, errOutput
-}
+	wg := &sync.WaitGroup{}
+	mtx := &sync.Mutex{}
 
-func (l *Loader) acceptProcedureChans(procedureChans []chan *ProcedureWrapper) ([]*model.Procedure, model.Error) {
-	const defaultErrKey = "acceptProcedureChans"
-	procedures := make([]*model.Procedure, len(procedureChans))
-	errOutput := make(model.Error)
-	for i, ch := range procedureChans {
-		proWrapper := <-ch
-		if proWrapper.Error != nil {
-			key := fmt.Sprintf("%s [%d]", defaultErrKey, i)
-			errOutput[key] = proWrapper.Error
-			continue
-		}
-		procedures[i] = proWrapper.Procedure
-	}
-	if len(errOutput) > 0 {
-		return nil, errOutput
-	}
-	return procedures, nil
-}
+	outputData := make([]*model.Definition, len(rcps))
+	outputError := make(model.Error)
+	for i, rcp := range rcps {
+		wg.Add(1)
 
-// DispatchProcedureChans dispatches channel to load procedures
-func (l *Loader) DispatchProcedureChans(procedureRcps []*recipe.Procedure) []chan *ProcedureWrapper {
-	procedureChans := make([]chan *ProcedureWrapper, len(procedureRcps))
-	for i, procedureRcp := range procedureRcps {
-		ch := make(chan *ProcedureWrapper)
-		go func(c chan *ProcedureWrapper, r *recipe.Procedure) {
-			procedure, err := l.LoadProcedure(r)
-			if err != nil {
-				c <- &ProcedureWrapper{
-					Error: err,
-				}
-			} else {
-				c <- &ProcedureWrapper{
-					Procedure: procedure,
-				}
+		go func(idx int, w *sync.WaitGroup, m *sync.Mutex, r *recipe.Definition) {
+			defer wg.Done()
 
-			}
-		}(ch, procedureRcp)
-		procedureChans[i] = ch
-	}
-	return procedureChans
-}
-
-// DispatchSchemaChans dispatches channel to load schemas
-func (l *Loader) DispatchSchemaChans(schemaRcps []*recipe.Schema) []chan *SchemaWrapper {
-	schemaChans := make([]chan *SchemaWrapper, len(schemaRcps))
-	for i, schemaRcp := range schemaRcps {
-		ch := make(chan *SchemaWrapper)
-		go func(c chan *SchemaWrapper, r *recipe.Schema) {
-			schema, err := l.LoadSchema(r)
-			if err != nil {
-				c <- &SchemaWrapper{
-					Error: err,
-				}
-			} else {
-				c <- &SchemaWrapper{
-					Schema: schema,
-				}
-
-			}
-		}(ch, schemaRcp)
-		schemaChans[i] = ch
-	}
-	return schemaChans
-}
-
-// DispatchDefinitionChans dispatches channel to load definitions
-func (l *Loader) DispatchDefinitionChans(definitionRcps []*recipe.Definition) []chan *DefinitionWrapper {
-	definitionChans := make([]chan *DefinitionWrapper, len(definitionRcps))
-	for i, definitionRcp := range definitionRcps {
-		ch := make(chan *DefinitionWrapper)
-		go func(c chan *DefinitionWrapper, r *recipe.Definition) {
 			definition, err := l.LoadDefinition(r)
 			if err != nil {
-				c <- &DefinitionWrapper{
-					Error: err,
-				}
+				key := fmt.Sprintf("%s [%d]", defaultErrKey, idx)
+				m.Lock()
+				outputError[key] = err
+				m.Unlock()
 			} else {
-				c <- &DefinitionWrapper{
-					Definition: definition,
-				}
-
+				m.Lock()
+				outputData[idx] = definition
+				m.Unlock()
 			}
-		}(ch, definitionRcp)
-		definitionChans[i] = ch
+		}(i, wg, mtx, rcp)
 	}
-	return definitionChans
+	wg.Wait()
+
+	if len(outputError) > 0 {
+		return nil, outputError
+	}
+	return outputData, nil
+}
+
+func (l *Loader) loadAllSchemas(rcps []*recipe.Schema) ([]*model.Schema, model.Error) {
+	const defaultErrKey = "loadAllSchemas"
+
+	wg := &sync.WaitGroup{}
+	mtx := &sync.Mutex{}
+
+	outputData := make([]*model.Schema, len(rcps))
+	outputError := make(model.Error)
+	for i, rcp := range rcps {
+		wg.Add(1)
+
+		go func(idx int, w *sync.WaitGroup, m *sync.Mutex, r *recipe.Schema) {
+			defer wg.Done()
+
+			schema, err := l.LoadSchema(r)
+			if err != nil {
+				key := fmt.Sprintf("%s [%d]", defaultErrKey, idx)
+				m.Lock()
+				outputError[key] = err
+				m.Unlock()
+			} else {
+				m.Lock()
+				outputData[idx] = schema
+				m.Unlock()
+			}
+		}(i, wg, mtx, rcp)
+	}
+	wg.Wait()
+
+	if len(outputError) > 0 {
+		return nil, outputError
+	}
+	return outputData, nil
+}
+
+func (l *Loader) loadAllProcedures(rcps []*recipe.Procedure) ([]*model.Procedure, model.Error) {
+	const defaultErrKey = "loadAllProcedures"
+
+	wg := &sync.WaitGroup{}
+	mtx := &sync.Mutex{}
+
+	outputData := make([]*model.Procedure, len(rcps))
+	outputError := make(model.Error)
+	for i, rcp := range rcps {
+		wg.Add(1)
+
+		go func(idx int, w *sync.WaitGroup, m *sync.Mutex, r *recipe.Procedure) {
+			defer wg.Done()
+
+			procedure, err := l.LoadProcedure(r)
+			if err != nil {
+				key := fmt.Sprintf("%s [%d]", defaultErrKey, idx)
+				m.Lock()
+				outputError[key] = err
+				m.Unlock()
+			} else {
+				m.Lock()
+				outputData[idx] = procedure
+				m.Unlock()
+			}
+		}(i, wg, mtx, rcp)
+	}
+	wg.Wait()
+
+	if len(outputError) > 0 {
+		return nil, outputError
+	}
+	return outputData, nil
 }
 
 // LoadDefinition loads definition based on its recipe
@@ -218,13 +187,13 @@ func (l *Loader) LoadDefinition(rcp *recipe.Definition) (*model.Definition, mode
 	}
 	listOfData, err := l.loadAllData(rcp.Path, rcp.Type, rcp.Format)
 	if err != nil {
-		return nil, model.BuildError(defaultErrKey, err)
+		return nil, err
 	}
 	var functionData *model.Data
 	if rcp.Function != nil {
 		data, err := l.loadOneData(rcp.Function.Path, rcp.Function.Type, jsonnetFormat)
 		if err != nil {
-			return nil, model.BuildError(defaultErrKey, err)
+			return nil, err
 		}
 		functionData = data
 	}
@@ -243,7 +212,7 @@ func (l *Loader) LoadSchema(rcp *recipe.Schema) (*model.Schema, model.Error) {
 	}
 	data, err := l.loadOneData(rcp.Path, rcp.Type, jsonFormat)
 	if err != nil {
-		return nil, model.BuildError(defaultErrKey, err)
+		return nil, err
 	}
 	return &model.Schema{
 		Name: rcp.Name,
@@ -259,7 +228,7 @@ func (l *Loader) LoadProcedure(rcp *recipe.Procedure) (*model.Procedure, model.E
 	}
 	data, err := l.loadOneData(rcp.Path, rcp.Type, jsonnetFormat)
 	if err != nil {
-		return nil, model.BuildError(defaultErrKey, err)
+		return nil, err
 	}
 	return &model.Procedure{
 		Name:          rcp.Name,
@@ -280,11 +249,11 @@ func (l *Loader) loadAllData(path, _type, format string) ([]*model.Data, model.E
 	const defaultErrKey = "loadAllData"
 	reader, err := l.getLoadReader(path, _type, format)
 	if err != nil {
-		return nil, model.BuildError(defaultErrKey, err)
+		return nil, err
 	}
 	data, err := reader.ReadAll()
 	if err != nil {
-		return nil, model.BuildError(defaultErrKey, err)
+		return nil, err
 	}
 	return data, nil
 }
@@ -293,7 +262,7 @@ func (l *Loader) getLoadReader(path, _type, format string) (model.Reader, model.
 	const defaultErrKey = "getLoadReader"
 	readerFn, err := io.Readers.Get(_type)
 	if err != nil {
-		return nil, model.BuildError(defaultErrKey, err)
+		return nil, err
 	}
 	reader := readerFn(
 		l.getPath(path),

@@ -2,6 +2,8 @@ package core
 
 import (
 	"errors"
+	"fmt"
+	"sync"
 
 	"github.com/gojek/optimus-extension-valor/model"
 
@@ -19,6 +21,16 @@ func NewValidator(framework *model.Framework) (*Validator, model.Error) {
 	if framework == nil {
 		return nil, model.BuildError(defaultErrKey, errors.New("framework is nil"))
 	}
+	outputError := make(model.Error)
+	for i, sch := range framework.Schemas {
+		if sch == nil {
+			key := fmt.Sprintf("%s [%d]", defaultErrKey, i)
+			outputError[key] = errors.New("schema is nil")
+		}
+	}
+	if len(outputError) > 0 {
+		return nil, outputError
+	}
 	return &Validator{
 		framework: framework,
 	}, nil
@@ -27,29 +39,31 @@ func NewValidator(framework *model.Framework) (*Validator, model.Error) {
 // Validate validates a Resource data against all schemas
 func (v *Validator) Validate(resourceData *model.Data) model.Error {
 	const defaultErrKey = "Validate"
-	validateChans := v.dispatchValidate(v.framework.Schemas, resourceData)
-	results := make([]model.Error, len(validateChans))
-	for i, ch := range validateChans {
-		results[i] = <-ch
+	if resourceData == nil {
+		return model.BuildError(defaultErrKey, errors.New("resource data is nil"))
 	}
-	return model.CombineErrors(results...)
-}
 
-func (v *Validator) dispatchValidate(schemaList []*model.Schema, resourceData *model.Data) []chan model.Error {
-	const defaultErrKey = "dispatchValidate"
-	validateChans := make([]chan model.Error, len(schemaList))
-	for i, schema := range schemaList {
-		ch := make(chan model.Error)
-		go func(c chan model.Error, sc *model.Schema, rsc *model.Data) {
-			if sc == nil {
-				c <- model.BuildError(defaultErrKey, errors.New("schema is nil"))
-				return
+	wg := &sync.WaitGroup{}
+	mtx := &sync.Mutex{}
+
+	outputError := make(model.Error)
+	for i, schema := range v.framework.Schemas {
+		wg.Add(1)
+		func(idx int, w *sync.WaitGroup, m *sync.Mutex, sch *model.Schema, rsc *model.Data) {
+			defer w.Done()
+
+			if err := v.validateResourceToSchema(sch.Data, rsc); err != nil {
+				key := fmt.Sprintf("%s [%s: %d]", defaultErrKey, sch.Name, idx)
+				m.Lock()
+				outputError[key] = err
+				m.Unlock()
 			}
-			c <- v.validateResourceToSchema(sc.Data, rsc)
-		}(ch, schema, resourceData)
-		validateChans[i] = ch
+		}(i, wg, mtx, schema, resourceData)
 	}
-	return validateChans
+	if len(outputError) > 0 {
+		return outputError
+	}
+	return nil
 }
 
 func (v *Validator) validateResourceToSchema(schemaData *model.Data, resourceData *model.Data) model.Error {
@@ -69,11 +83,14 @@ func (v *Validator) validateResourceToSchema(schemaData *model.Data, resourceDat
 	if result.Valid() {
 		return nil
 	}
-	output := make([]model.Error, len(result.Errors()))
-	for i, r := range result.Errors() {
+	outputError := make(model.Error)
+	for _, r := range result.Errors() {
 		field := r.Field()
 		msg := r.Description()
-		output[i] = model.BuildError(field, msg)
+		outputError[field] = msg
 	}
-	return model.CombineErrors(output...)
+	if len(outputError) > 0 {
+		return outputError
+	}
+	return nil
 }
