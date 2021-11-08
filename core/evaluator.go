@@ -71,7 +71,7 @@ func (e *Evaluator) Evaluate(resourceData *model.Data) (string, model.Error) {
 }
 
 func (e *Evaluator) resultToError(result string) model.Error {
-	const defaultErrKey = "resultToError"
+	const defaultErrKey = "evaluation result"
 	fn, err := endec.Decodes.Get(jsonFormat)
 	if err != nil {
 		return err

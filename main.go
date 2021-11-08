@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"os"
 
 	"github.com/gojek/optimus-extension-valor/core"
@@ -13,60 +14,74 @@ import (
 	"github.com/gojek/optimus-extension-valor/registry/io"
 
 	"github.com/go-playground/validator/v10"
+	"github.com/spf13/cobra"
 )
 
 const (
-	defaultPath = "./valor.yaml"
-	decoderType = "yaml"
+	defaultRecipeType   = "file"
+	defaultRecipePath   = "./valor.yaml"
+	defaultRecipeFormat = "yaml"
+	defaultBatchSize    = 4
 )
 
 func main() {
-	var args []string
-	if len(os.Args) > 1 {
-		args = append(args, os.Args[1])
+	var path string
+	var batch int
+	cmd := &cobra.Command{
+		Use:          "valor",
+		Short:        "valor [flags]",
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			rcp, err := loadRecipe(path, defaultRecipeType, defaultRecipeFormat)
+			if err != nil {
+				return errors.New(string(err.JSON()))
+			}
+			pipeline, err := core.NewPipeline(rcp, batch)
+			if err != nil {
+				return errors.New(string(err.JSON()))
+			}
+			if err := pipeline.Execute(); err != nil {
+				return errors.New(string(err.JSON()))
+			}
+			return nil
+		},
 	}
-	rcp := loadRecipe()
-
-	eval, err := core.NewPipeline(rcp)
-	if err != nil {
-		panic(err)
-	}
-	err = eval.Execute()
-	if err != nil {
-		panic(err)
+	cmd.Flags().StringVarP(&path, "recipe", "r", defaultRecipePath, "path of the recipe")
+	cmd.Flags().IntVarP(&batch, "batch", "b", defaultBatchSize, "batch size for each process")
+	if err := cmd.Execute(); err != nil {
+		os.Exit(1)
 	}
 }
 
-func loadRecipe() *recipe.Recipe {
-	readerType := "file"
-	fnReader, err := io.Readers.Get(readerType)
+func loadRecipe(path, _type, format string) (*recipe.Recipe, model.Error) {
+	fnReader, err := io.Readers.Get(_type)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	getPath := func() string {
-		return defaultPath
+		return path
 	}
-	filterPath := func(path string) bool {
+	filterPath := func(p string) bool {
 		return true
 	}
-	postProcess := func(path string, content []byte) (*model.Data, model.Error) {
+	postProcess := func(p string, c []byte) (*model.Data, model.Error) {
 		return &model.Data{
-			Content: content,
-			Path:    path,
-			Type:    readerType,
+			Content: c,
+			Path:    p,
+			Type:    format,
 		}, nil
 	}
 	reader := fnReader(getPath, filterPath, postProcess)
-	decode, err := endec.Decodes.Get(decoderType)
+	decode, err := endec.Decodes.Get(format)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	rcp, err := recipe.Load(reader, decode)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	if err := validator.New().Struct(rcp); err != nil {
-		panic(err)
+		return nil, model.BuildError(path, err)
 	}
-	return rcp
+	return rcp, nil
 }
