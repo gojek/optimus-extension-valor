@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/gojek/optimus-extension-valor/model"
 	_ "github.com/gojek/optimus-extension-valor/plugin/io" // init error writer
@@ -72,30 +71,27 @@ func (p *Pipeline) Execute() model.Error {
 		decorate := strings.Repeat("=", 12)
 		fmt.Printf("%s PROCESSING RESOURCE [%s] %s\n", decorate, resourceRcp.Name, decorate)
 
-		start := time.Now()
 		fmt.Println("> Loading resource")
 		resource, err := p.loader.LoadResource(resourceRcp)
 		if err != nil {
 			fmt.Println("* Loading failed!!!")
 			return err
 		}
-		fmt.Printf("> Loading finished [%v]\n", time.Now().Sub(start))
+		fmt.Printf("> Loading finished\n")
 
 		for _, frameworkName := range resource.FrameworkNames {
 			decorate := strings.Repeat(":", 5)
 			fmt.Printf("%s Processing Framework [%s] %s\n", decorate, frameworkName, decorate)
 			frameworkRcp := p.nameToFrameworkRecipe[frameworkName]
 
-			start := time.Now()
 			fmt.Println(" >> Loading framework")
 			framework, err := p.loader.LoadFramework(frameworkRcp)
 			if err != nil {
 				fmt.Println(" ** Loading failed!!!")
 				return err
 			}
-			fmt.Printf(" >  Loading finished [%v]\n", time.Now().Sub(start))
+			fmt.Printf(" >  Loading finished\n")
 
-			start = time.Now()
 			fmt.Println(" >> Validating resource")
 			success := p.validate(framework, resource.ListOfData)
 			if !success {
@@ -103,9 +99,8 @@ func (p *Pipeline) Execute() model.Error {
 				key := fmt.Sprintf("%s [validate: %s]", defaultErrKey, frameworkName)
 				return model.BuildError(key, errors.New("error is met during validation"))
 			}
-			fmt.Printf(" >  Validation finished [%v]\n", time.Now().Sub(start))
+			fmt.Printf(" >  Validation finished\n")
 
-			start = time.Now()
 			fmt.Println(" >> Evaluating resource")
 			evalResults, success := p.evaluate(p.vm, framework, resource.ListOfData)
 			if !success {
@@ -113,9 +108,8 @@ func (p *Pipeline) Execute() model.Error {
 				key := fmt.Sprintf("%s [evaluate: %s]", defaultErrKey, frameworkName)
 				return model.BuildError(key, errors.New("error is met during evaluation"))
 			}
-			fmt.Printf(" >  Evaluation finished [%v]\n", time.Now().Sub(start))
+			fmt.Printf(" >  Evaluation finished\n")
 
-			start = time.Now()
 			fmt.Println(" >> Writing result")
 			success = p.writeOutput(evalResults, framework.OutputTargets)
 			if !success {
@@ -123,7 +117,7 @@ func (p *Pipeline) Execute() model.Error {
 				key := fmt.Sprintf("%s [write: %s]", defaultErrKey, frameworkName)
 				return model.BuildError(key, errors.New("error is met during write"))
 			}
-			fmt.Printf(" >  Writing finished [%v]\n", time.Now().Sub(start))
+			fmt.Printf(" >  Writing finished\n")
 		}
 		fmt.Println()
 	}
@@ -141,17 +135,15 @@ func (p *Pipeline) validate(framework *model.Framework, resourceData []*model.Da
 		})
 		return false
 	}
-
+	progress := NewProgress(fmt.Sprintf("%s [%s]", defaultErrKey, framework.Name), len(resourceData))
 	wg := &sync.WaitGroup{}
 	mtx := &sync.Mutex{}
 
 	success := true
 	for i, data := range resourceData {
 		wg.Add(1)
-
 		go func(idx int, v *Validator, w *sync.WaitGroup, m *sync.Mutex, d *model.Data) {
 			defer w.Done()
-
 			if err := v.Validate(d); err != nil {
 				m.Lock()
 				success = false
@@ -167,9 +159,15 @@ func (p *Pipeline) validate(framework *model.Framework, resourceData []*model.Da
 					Path:    pt,
 				})
 			}
+			if success {
+				m.Lock()
+				progress.Increment()
+				m.Unlock()
+			}
 		}(i, validator, wg, mtx, data)
 	}
 	wg.Wait()
+	progress.Wait()
 	return success
 }
 
@@ -184,7 +182,7 @@ func (p *Pipeline) evaluate(vm *jsonnet.VM, framework *model.Framework, resource
 		})
 		return nil, false
 	}
-
+	progress := NewProgress(fmt.Sprintf("%s [%s]", defaultErrKey, framework.Name), len(resourceData))
 	wg := &sync.WaitGroup{}
 	mtx := &sync.Mutex{}
 
@@ -192,10 +190,8 @@ func (p *Pipeline) evaluate(vm *jsonnet.VM, framework *model.Framework, resource
 	success := true
 	for i, data := range resourceData {
 		wg.Add(1)
-
 		go func(idx int, v *Evaluator, w *sync.WaitGroup, m *sync.Mutex, d *model.Data) {
 			defer w.Done()
-
 			rst, err := v.Evaluate(d)
 			if err != nil {
 				m.Lock()
@@ -212,19 +208,23 @@ func (p *Pipeline) evaluate(vm *jsonnet.VM, framework *model.Framework, resource
 					Path:    pt,
 				})
 			} else {
-				if success {
-					m.Lock()
-					outputResult[idx] = &model.Data{
-						Type:    d.Type,
-						Path:    d.Path,
-						Content: []byte(rst),
-					}
-					m.Unlock()
+				m.Lock()
+				outputResult[idx] = &model.Data{
+					Type:    d.Type,
+					Path:    d.Path,
+					Content: []byte(rst),
 				}
+				m.Unlock()
+			}
+			if success {
+				m.Lock()
+				progress.Increment()
+				m.Unlock()
 			}
 		}(i, evaluator, wg, mtx, data)
 	}
 	wg.Wait()
+	progress.Wait()
 
 	if success {
 		return outputResult, true
@@ -252,17 +252,14 @@ func (p *Pipeline) writeOutput(evalResults []*model.Data, outputTargets []*model
 		})
 		return false
 	}
-
 	wg := &sync.WaitGroup{}
 	mtx := &sync.Mutex{}
 
 	success := true
 	for i := 0; i < len(outputTargets); i++ {
 		wg.Add(1)
-
 		go func(idx int, w *sync.WaitGroup, m *sync.Mutex) {
 			defer w.Done()
-
 			newResults := make([]*model.Data, len(evalResults))
 			currentSuccess := true
 			for j := 0; j < len(evalResults); j++ {
