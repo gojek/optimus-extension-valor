@@ -26,32 +26,15 @@ func main() {
 		args = append(args, os.Args[1])
 	}
 	rcp := loadRecipe()
-	writer := getErrorWriter()
 
 	eval, err := core.NewPipeline(rcp)
 	if err != nil {
-		writeError(writer, err)
+		panic(err)
 	}
 	err = eval.Execute()
 	if err != nil {
-		writeError(writer, err)
-	}
-}
-
-func writeError(writer model.Writer, err model.Error) {
-	data := &model.Data{
-		Content: err.JSON(),
-	}
-	writer.Write(data)
-	os.Exit(1)
-}
-
-func getErrorWriter() model.Writer {
-	writer, err := io.Writers.Get("std")
-	if err != nil {
 		panic(err)
 	}
-	return writer
 }
 
 func loadRecipe() *recipe.Recipe {

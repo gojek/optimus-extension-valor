@@ -8,18 +8,13 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sync"
 
 	"github.com/gojek/optimus-extension-valor/model"
 	"github.com/gojek/optimus-extension-valor/registry/io"
 )
 
 const _type = "dir"
-
-// ContentWrapper is a wrapper for loading content via channel
-type ContentWrapper struct {
-	Content []byte
-	Error   model.Error
-}
 
 // Dir represents directory operation
 type Dir struct {
@@ -33,103 +28,100 @@ func (d *Dir) Write(dataList ...*model.Data) model.Error {
 	if len(dataList) == 0 {
 		return model.BuildError(defaultErrKey, errors.New("data is empty"))
 	}
-	writeChans := make([]chan error, len(dataList))
-	for i, data := range dataList {
-		ch := make(chan error)
-		go func(c chan error, dt *model.Data) {
+
+	wg := &sync.WaitGroup{}
+	mtx := &sync.Mutex{}
+
+	outputError := make(model.Error)
+	for _, data := range dataList {
+		wg.Add(1)
+
+		go func(w *sync.WaitGroup, m *sync.Mutex, dt *model.Data) {
+			defer w.Done()
+
+			key := fmt.Sprintf("%s [%s]", defaultErrKey, dt.Path)
 			dirPath, _ := path.Split(dt.Path)
 			if err := os.MkdirAll(dirPath, os.ModePerm); err != nil {
-				c <- err
+				m.Lock()
+				outputError[key] = err
+				m.Unlock()
 				return
 			}
 			if err := ioutil.WriteFile(dirPath, dt.Content, os.ModePerm); err != nil {
-				c <- err
+				m.Lock()
+				outputError[key] = err
+				m.Unlock()
 				return
 			}
-			c <- nil
-		}(ch, data)
-		writeChans[i] = ch
+		}(wg, mtx, data)
 	}
-	output := make(model.Error)
-	for i, ch := range writeChans {
-		err := <-ch
-		if err != nil {
-			key := fmt.Sprintf("%s [%s]", defaultErrKey, dataList[i].Path)
-			output[key] = err
-		}
+	wg.Wait()
+	if len(outputError) > 0 {
+		return outputError
 	}
-	if len(output) == 0 {
-		output = nil
-	}
-	return output
+	return nil
 }
 
 // ReadAll reads all files in a directory
 func (d *Dir) ReadAll() ([]*model.Data, model.Error) {
 	const defaultErrKey = "ReadAll"
 	if err := d.validate(); err != nil {
-		return nil, model.BuildError(defaultErrKey, err)
+		return nil, err
 	}
 	dirPath := d.getPath()
 	filePaths, err := d.getFilePaths(dirPath, d.filterPath)
 	if err != nil {
-		return nil, model.BuildError(defaultErrKey, err)
+		return nil, err
 	}
-	readChans := d.dispatchRead(filePaths)
-	outputData := make([]*model.Data, len(readChans))
+
+	wg := &sync.WaitGroup{}
+	mtx := &sync.Mutex{}
+
+	outputData := make([]*model.Data, len(filePaths))
 	outputError := make(model.Error)
-	for i, ch := range readChans {
-		path := filePaths[i]
-		key := fmt.Sprintf("%s [%s]", defaultErrKey, path)
-		readWrapper := <-ch
-		if readWrapper.Error != nil {
-			outputError[key] = readWrapper.Error
-			continue
-		}
-		data, err := d.postProcess(path, readWrapper.Content)
-		if err != nil {
-			outputError[key] = err
-		}
-		outputData[i] = data
+	for i, path := range filePaths {
+		wg.Add(1)
+
+		go func(idx int, w *sync.WaitGroup, m *sync.Mutex, pt string) {
+			defer w.Done()
+
+			key := fmt.Sprintf("%s [%s]", defaultErrKey, pt)
+			content, err := ioutil.ReadFile(pt)
+			if err != nil {
+				m.Lock()
+				outputError[key] = err
+				m.Unlock()
+			} else {
+				data, err := d.postProcess(pt, content)
+				if err != nil {
+					m.Lock()
+					outputError[key] = err
+					m.Unlock()
+				} else {
+					m.Lock()
+					outputData[idx] = data
+					m.Unlock()
+				}
+			}
+		}(i, wg, mtx, path)
 	}
+	wg.Wait()
 	if len(outputError) > 0 {
 		return nil, outputError
 	}
 	return outputData, nil
 }
 
-func (d *Dir) dispatchRead(filePaths []string) []chan *ContentWrapper {
-	const defaultErrKey = "dispatchRead"
-	readChans := make([]chan *ContentWrapper, len(filePaths))
-	for i, path := range filePaths {
-		ch := make(chan *ContentWrapper)
-		go func(c chan *ContentWrapper, p string) {
-			content, err := ioutil.ReadFile(p)
-			if err != nil {
-				c <- &ContentWrapper{
-					Error: model.BuildError(defaultErrKey, err),
-				}
-			} else {
-				c <- &ContentWrapper{
-					Content: content,
-				}
-			}
-		}(ch, path)
-		readChans[i] = ch
-	}
-	return readChans
-}
-
 // ReadOne reads the first file in a directory
 func (d *Dir) ReadOne() (*model.Data, model.Error) {
 	const defaultErrKey = "ReadOne"
 	if err := d.validate(); err != nil {
-		return nil, model.BuildError(defaultErrKey, err)
+		return nil, err
 	}
 	dirPath := d.getPath()
 	filePaths, pathErr := d.getFilePaths(dirPath, d.filterPath)
 	if pathErr != nil {
-		return nil, model.BuildError(defaultErrKey, pathErr)
+		return nil, pathErr
 	}
 	content, readErr := ioutil.ReadFile(filePaths[0])
 	if readErr != nil {
