@@ -39,15 +39,16 @@ var skipReformat = map[string]bool{
 
 // Pipeline defines how a pipeline is executed
 type Pipeline struct {
-	recipe *recipe.Recipe
-	loader *Loader
-	vm     *jsonnet.VM
+	recipe    *recipe.Recipe
+	loader    *Loader
+	vm        *jsonnet.VM
+	batchSize int
 
 	nameToFrameworkRecipe map[string]*recipe.Framework
 }
 
 // NewPipeline initializes pipeline process
-func NewPipeline(rcp *recipe.Recipe) (*Pipeline, model.Error) {
+func NewPipeline(rcp *recipe.Recipe, batchSize int) (*Pipeline, model.Error) {
 	const defaultErrKey = "NewPipeline"
 	if rcp == nil {
 		return nil, model.BuildError(defaultErrKey, errors.New("recipe is nil"))
@@ -60,6 +61,7 @@ func NewPipeline(rcp *recipe.Recipe) (*Pipeline, model.Error) {
 		recipe:                rcp,
 		loader:                &Loader{},
 		vm:                    jsonnet.MakeVM(),
+		batchSize:             batchSize,
 		nameToFrameworkRecipe: nameToFrameworkRecipe,
 	}, nil
 }
@@ -102,7 +104,7 @@ func (p *Pipeline) Execute() model.Error {
 			fmt.Printf(" >  Validation finished\n")
 
 			fmt.Println(" >> Evaluating resource")
-			evalResults, success := p.evaluate(p.vm, framework, resource.ListOfData)
+			evalResults, success := p.evaluate(framework, resource.ListOfData)
 			if !success {
 				fmt.Println(" ** Evaluation failed!!!")
 				key := fmt.Sprintf("%s [evaluate: %s]", defaultErrKey, frameworkName)
@@ -171,9 +173,9 @@ func (p *Pipeline) validate(framework *model.Framework, resourceData []*model.Da
 	return success
 }
 
-func (p *Pipeline) evaluate(vm *jsonnet.VM, framework *model.Framework, resourceData []*model.Data) ([]*model.Data, bool) {
+func (p *Pipeline) evaluate(framework *model.Framework, resourceData []*model.Data) ([]*model.Data, bool) {
 	const defaultErrKey = "evaluate"
-	evaluator, err := NewEvaluator(framework, vm)
+	evaluator, err := NewEvaluator(framework, p.vm)
 	if err != nil {
 		errorWriter.Write(&model.Data{
 			Type:    errorWriterType,
@@ -183,47 +185,56 @@ func (p *Pipeline) evaluate(vm *jsonnet.VM, framework *model.Framework, resource
 		return nil, false
 	}
 	progress := NewProgress(fmt.Sprintf("%s [%s]", defaultErrKey, framework.Name), len(resourceData))
-	wg := &sync.WaitGroup{}
-	mtx := &sync.Mutex{}
 
-	outputResult := make([]*model.Data, len(resourceData))
-	success := true
-	for i, data := range resourceData {
-		wg.Add(1)
-		go func(idx int, v *Evaluator, w *sync.WaitGroup, m *sync.Mutex, d *model.Data) {
-			defer w.Done()
-			rst, err := v.Evaluate(d)
-			if err != nil {
-				m.Lock()
-				success = false
-				m.Unlock()
-
-				pt := fmt.Sprintf("%s [%d]", defaultErrKey, idx)
-				if d != nil {
-					pt = d.Path
-				}
-				errorWriter.Write(&model.Data{
-					Type:    errorWriterType,
-					Content: err.JSON(),
-					Path:    pt,
-				})
-			} else {
-				m.Lock()
-				outputResult[idx] = &model.Data{
-					Type:    d.Type,
-					Path:    d.Path,
-					Content: []byte(rst),
-				}
-				m.Unlock()
-			}
-			if success {
-				m.Lock()
-				progress.Increment()
-				m.Unlock()
-			}
-		}(i, evaluator, wg, mtx, data)
+	batch := p.batchSize
+	if batch <= 0 || batch >= len(resourceData) {
+		batch = len(resourceData)
 	}
-	wg.Wait()
+	counter := 0
+
+	success := true
+	outputResult := make([]*model.Data, len(resourceData))
+	for counter < len(resourceData) {
+		evalChans := make([]chan *model.Data, batch)
+		for i := 0; i < batch && counter+i < len(resourceData); i++ {
+			data := resourceData[counter+i]
+			ch := make(chan *model.Data)
+			go func(idx int, v *Evaluator, d *model.Data, c chan *model.Data) {
+				rst, err := v.Evaluate(d)
+				var output *model.Data
+				if err != nil {
+					pt := fmt.Sprintf("%s [%d]", defaultErrKey, idx)
+					if d != nil {
+						pt = d.Path
+					}
+					errorWriter.Write(&model.Data{
+						Type:    errorWriterType,
+						Content: err.JSON(),
+						Path:    pt,
+					})
+				} else {
+					output = &model.Data{
+						Type:    d.Type,
+						Path:    d.Path,
+						Content: []byte(rst),
+					}
+				}
+				ch <- output
+			}(i, evaluator, data, ch)
+			evalChans[i] = ch
+		}
+		for i := 0; i < batch && counter+i < len(resourceData); i++ {
+			rst := <-evalChans[i]
+			close(evalChans[i])
+			if rst == nil {
+				success = false
+			} else {
+				outputResult[counter+i] = rst
+			}
+			progress.Increment()
+		}
+		counter += batch
+	}
 	progress.Wait()
 
 	if success {
