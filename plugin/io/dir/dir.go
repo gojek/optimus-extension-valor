@@ -47,7 +47,7 @@ func (d *Dir) Write(dataList ...*model.Data) model.Error {
 				m.Unlock()
 				return
 			}
-			if err := ioutil.WriteFile(dirPath, dt.Content, os.ModePerm); err != nil {
+			if err := ioutil.WriteFile(dt.Path, dt.Content, os.ModePerm); err != nil {
 				m.Lock()
 				outputError[key] = err
 				m.Unlock()
