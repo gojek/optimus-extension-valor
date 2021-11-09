@@ -9,6 +9,7 @@ import (
 	_ "github.com/gojek/optimus-extension-valor/plugin/endec"
 	_ "github.com/gojek/optimus-extension-valor/plugin/formatter"
 	_ "github.com/gojek/optimus-extension-valor/plugin/io"
+	_ "github.com/gojek/optimus-extension-valor/plugin/progress"
 	"github.com/gojek/optimus-extension-valor/recipe"
 	"github.com/gojek/optimus-extension-valor/registry/endec"
 	"github.com/gojek/optimus-extension-valor/registry/io"
@@ -22,11 +23,13 @@ const (
 	defaultRecipePath   = "./valor.yaml"
 	defaultRecipeFormat = "yaml"
 	defaultBatchSize    = 4
+	defaultProgressType = "verbose"
 )
 
 func main() {
 	var path string
 	var batch int
+	var progressType string
 	cmd := &cobra.Command{
 		Use:          "valor",
 		Short:        "valor [flags]",
@@ -36,7 +39,7 @@ func main() {
 			if err != nil {
 				return errors.New(string(err.JSON()))
 			}
-			pipeline, err := core.NewPipeline(rcp, batch)
+			pipeline, err := core.NewPipeline(rcp, batch, progressType)
 			if err != nil {
 				return errors.New(string(err.JSON()))
 			}
@@ -48,6 +51,7 @@ func main() {
 	}
 	cmd.Flags().StringVarP(&path, "recipe", "r", defaultRecipePath, "path of the recipe")
 	cmd.Flags().IntVarP(&batch, "batch", "b", defaultBatchSize, "batch size for each process")
+	cmd.Flags().StringVarP(&progressType, "progress", "p", defaultProgressType, "progress of the process to show")
 	if err := cmd.Execute(); err != nil {
 		os.Exit(1)
 	}

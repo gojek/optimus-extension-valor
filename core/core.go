@@ -11,11 +11,15 @@ import (
 	"github.com/gojek/optimus-extension-valor/recipe"
 	"github.com/gojek/optimus-extension-valor/registry/formatter"
 	"github.com/gojek/optimus-extension-valor/registry/io"
+	"github.com/gojek/optimus-extension-valor/registry/progress"
 
 	"github.com/google/go-jsonnet"
 )
 
-const errorWriterType = "std"
+const (
+	errorWriterType     = "std"
+	defaultProgressType = "verbose"
+)
 
 var errorWriter model.Writer
 
@@ -39,16 +43,17 @@ var skipReformat = map[string]bool{
 
 // Pipeline defines how a pipeline is executed
 type Pipeline struct {
-	recipe    *recipe.Recipe
-	loader    *Loader
-	vm        *jsonnet.VM
-	batchSize int
+	recipe      *recipe.Recipe
+	loader      *Loader
+	vm          *jsonnet.VM
+	batchSize   int
+	newProgress model.NewProgress
 
 	nameToFrameworkRecipe map[string]*recipe.Framework
 }
 
 // NewPipeline initializes pipeline process
-func NewPipeline(rcp *recipe.Recipe, batchSize int) (*Pipeline, model.Error) {
+func NewPipeline(rcp *recipe.Recipe, batchSize int, progressType string) (*Pipeline, model.Error) {
 	const defaultErrKey = "NewPipeline"
 	if rcp == nil {
 		return nil, model.BuildError(defaultErrKey, errors.New("recipe is nil"))
@@ -57,11 +62,19 @@ func NewPipeline(rcp *recipe.Recipe, batchSize int) (*Pipeline, model.Error) {
 	for _, frameworkRcp := range rcp.Frameworks {
 		nameToFrameworkRecipe[frameworkRcp.Name] = frameworkRcp
 	}
+	if progressType == "" {
+		progressType = defaultProgressType
+	}
+	newProgress, err := progress.Progresses.Get(progressType)
+	if err != nil {
+		return nil, err
+	}
 	return &Pipeline{
 		recipe:                rcp,
 		loader:                &Loader{},
 		vm:                    jsonnet.MakeVM(),
 		batchSize:             batchSize,
+		newProgress:           newProgress,
 		nameToFrameworkRecipe: nameToFrameworkRecipe,
 	}, nil
 }
@@ -137,7 +150,7 @@ func (p *Pipeline) validate(framework *model.Framework, resourceData []*model.Da
 		})
 		return false
 	}
-	progress := NewProgress(fmt.Sprintf("%s [%s]", defaultErrKey, framework.Name), len(resourceData))
+	progress := p.newProgress(fmt.Sprintf("%s [%s]", defaultErrKey, framework.Name), len(resourceData))
 	wg := &sync.WaitGroup{}
 	mtx := &sync.Mutex{}
 
@@ -184,7 +197,7 @@ func (p *Pipeline) evaluate(framework *model.Framework, resourceData []*model.Da
 		})
 		return nil, false
 	}
-	progress := NewProgress(fmt.Sprintf("%s [%s]", defaultErrKey, framework.Name), len(resourceData))
+	progress := p.newProgress(fmt.Sprintf("%s [%s]", defaultErrKey, framework.Name), len(resourceData))
 
 	batch := p.batchSize
 	if batch <= 0 || batch >= len(resourceData) {
