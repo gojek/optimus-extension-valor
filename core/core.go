@@ -3,6 +3,7 @@ package core
 import (
 	"errors"
 	"fmt"
+	"path"
 	"strings"
 	"sync"
 
@@ -299,7 +300,7 @@ func (p *Pipeline) writeOutput(evalResults []*model.Data, outputTargets []*model
 				}
 				newResults[j] = &model.Data{
 					Type:    evalResults[j].Type,
-					Path:    evalResults[j].Path,
+					Path:    path.Join(outputTargets[idx].Path, evalResults[j].Path),
 					Content: newContent,
 				}
 			}
