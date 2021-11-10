@@ -17,7 +17,11 @@ const (
 
 // ToJSON formats input from JSON to JSON, which does nothing
 func ToJSON(input []byte) ([]byte, model.Error) {
-	return input, nil
+	output := make([]byte, len(input))
+	for i := 0; i < len(input); i++ {
+		output[i] = input[i]
+	}
+	return output, nil
 }
 
 // ToYAML formats input from JSON to YAML

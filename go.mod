@@ -5,6 +5,7 @@ go 1.17
 require (
 	github.com/go-playground/validator/v10 v10.9.0
 	github.com/google/go-jsonnet v0.17.0
+	github.com/olekukonko/tablewriter v0.0.5
 	github.com/spf13/cobra v1.2.1
 	github.com/stretchr/testify v1.7.0
 	github.com/vbauerster/mpb/v7 v7.1.5
