@@ -1,6 +1,8 @@
 package yaml
 
 import (
+	"fmt"
+
 	"github.com/gojek/optimus-extension-valor/model"
 	"github.com/gojek/optimus-extension-valor/registry/endec"
 
@@ -13,9 +15,20 @@ const format = "yaml"
 func NewEncode() model.Encode {
 	const defaultErrKey = "NewEncode"
 	return func(i interface{}) ([]byte, model.Error) {
-		output, err := yaml.Marshal(i)
+		var recoverErr error
+		output, err := func() ([]byte, error) {
+			defer func() {
+				if rec := recover(); rec != nil {
+					recoverErr = fmt.Errorf("%v", rec)
+				}
+			}()
+			return yaml.Marshal(i)
+		}()
 		if err != nil {
 			return nil, model.BuildError(defaultErrKey, err)
+		}
+		if recoverErr != nil {
+			return nil, model.BuildError(defaultErrKey, recoverErr)
 		}
 		return output, nil
 	}
