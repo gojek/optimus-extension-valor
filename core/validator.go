@@ -71,9 +71,6 @@ func (v *Validator) validateResourceToSchema(schemaData *model.Data, resourceDat
 	if schemaData == nil {
 		return model.BuildError(defaultErrKey, errors.New("schema data is nil"))
 	}
-	if resourceData == nil {
-		return model.BuildError(defaultErrKey, errors.New("resource data is nil"))
-	}
 	schemaLoader := gojsonschema.NewStringLoader(string(schemaData.Content))
 	recordLoader := gojsonschema.NewStringLoader(string(resourceData.Content))
 	result, validateErr := gojsonschema.Validate(schemaLoader, recordLoader)

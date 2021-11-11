@@ -9,6 +9,9 @@ import (
 	"github.com/gojek/optimus-extension-valor/recipe"
 	"github.com/gojek/optimus-extension-valor/registry/endec"
 	"github.com/gojek/optimus-extension-valor/registry/io"
+	"github.com/gojek/optimus-extension-valor/registry/progress"
+
+	"github.com/google/go-jsonnet"
 	"github.com/spf13/cobra"
 )
 
@@ -54,7 +57,12 @@ func executePipeline(recipePath string, batchSize int, progressType string, enri
 	if err := recipe.Validate(rcp); err != nil {
 		return err
 	}
-	pipeline, err := core.NewPipeline(rcp, batchSize, progressType)
+	newProgress, err := progress.Progresses.Get(progressType)
+	if err != nil {
+		return err
+	}
+	evaluate := getEvaluate()
+	pipeline, err := core.NewPipeline(rcp, batchSize, evaluate, newProgress)
 	if err != nil {
 		return err
 	}
@@ -62,6 +70,13 @@ func executePipeline(recipePath string, batchSize int, progressType string, enri
 		return err
 	}
 	return nil
+}
+
+func getEvaluate() model.Evaluate {
+	vm := jsonnet.MakeVM()
+	return func(name, snippet string) (string, error) {
+		return vm.EvaluateAnonymousSnippet(name, snippet)
+	}
 }
 
 func loadRecipe(path, _type, format string) (*recipe.Recipe, model.Error) {

@@ -12,9 +12,6 @@ import (
 	"github.com/gojek/optimus-extension-valor/recipe"
 	"github.com/gojek/optimus-extension-valor/registry/formatter"
 	"github.com/gojek/optimus-extension-valor/registry/io"
-	"github.com/gojek/optimus-extension-valor/registry/progress"
-
-	"github.com/google/go-jsonnet"
 )
 
 const (
@@ -46,7 +43,7 @@ var skipReformat = map[string]bool{
 type Pipeline struct {
 	recipe      *recipe.Recipe
 	loader      *Loader
-	vm          *jsonnet.VM
+	evaluate    model.Evaluate
 	batchSize   int
 	newProgress model.NewProgress
 
@@ -54,7 +51,12 @@ type Pipeline struct {
 }
 
 // NewPipeline initializes pipeline process
-func NewPipeline(rcp *recipe.Recipe, batchSize int, progressType string) (*Pipeline, model.Error) {
+func NewPipeline(
+	rcp *recipe.Recipe,
+	batchSize int,
+	evaluate model.Evaluate,
+	newProgress model.NewProgress,
+) (*Pipeline, model.Error) {
 	const defaultErrKey = "NewPipeline"
 	if rcp == nil {
 		return nil, model.BuildError(defaultErrKey, errors.New("recipe is nil"))
@@ -63,17 +65,10 @@ func NewPipeline(rcp *recipe.Recipe, batchSize int, progressType string) (*Pipel
 	for _, frameworkRcp := range rcp.Frameworks {
 		nameToFrameworkRecipe[frameworkRcp.Name] = frameworkRcp
 	}
-	if progressType == "" {
-		progressType = defaultProgressType
-	}
-	newProgress, err := progress.Progresses.Get(progressType)
-	if err != nil {
-		return nil, err
-	}
 	return &Pipeline{
 		recipe:                rcp,
 		loader:                &Loader{},
-		vm:                    jsonnet.MakeVM(),
+		evaluate:              evaluate,
 		batchSize:             batchSize,
 		newProgress:           newProgress,
 		nameToFrameworkRecipe: nameToFrameworkRecipe,
@@ -109,7 +104,7 @@ func (p *Pipeline) Execute() model.Error {
 			fmt.Printf(" >  Loading finished\n")
 
 			fmt.Println(" >> Validating resource")
-			success := p.validate(framework, resource.ListOfData)
+			success := p.executeValidate(framework, resource.ListOfData)
 			if !success {
 				fmt.Println(" ** Validation failed!!!")
 				key := fmt.Sprintf("%s [validate: %s]", defaultErrKey, frameworkName)
@@ -118,7 +113,7 @@ func (p *Pipeline) Execute() model.Error {
 			fmt.Printf(" >  Validation finished\n")
 
 			fmt.Println(" >> Evaluating resource")
-			evalResults, success := p.evaluate(framework, resource.ListOfData)
+			evalResults, success := p.executeEvaluate(framework, resource.ListOfData)
 			if !success {
 				fmt.Println(" ** Evaluation failed!!!")
 				key := fmt.Sprintf("%s [evaluate: %s]", defaultErrKey, frameworkName)
@@ -140,7 +135,7 @@ func (p *Pipeline) Execute() model.Error {
 	return nil
 }
 
-func (p *Pipeline) validate(framework *model.Framework, resourceData []*model.Data) bool {
+func (p *Pipeline) executeValidate(framework *model.Framework, resourceData []*model.Data) bool {
 	const defaultErrKey = "validate"
 	validator, err := NewValidator(framework)
 	if err != nil {
@@ -187,9 +182,9 @@ func (p *Pipeline) validate(framework *model.Framework, resourceData []*model.Da
 	return success
 }
 
-func (p *Pipeline) evaluate(framework *model.Framework, resourceData []*model.Data) ([]*model.Data, bool) {
+func (p *Pipeline) executeEvaluate(framework *model.Framework, resourceData []*model.Data) ([]*model.Data, bool) {
 	const defaultErrKey = "evaluate"
-	evaluator, err := NewEvaluator(framework, p.vm)
+	evaluator, err := NewEvaluator(framework, p.evaluate)
 	if err != nil {
 		errorWriter.Write(&model.Data{
 			Type:    errorWriterType,
