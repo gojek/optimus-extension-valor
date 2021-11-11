@@ -8,33 +8,30 @@ import (
 
 	"github.com/gojek/optimus-extension-valor/model"
 	"github.com/gojek/optimus-extension-valor/registry/endec"
-
-	"github.com/google/go-jsonnet"
 )
 
 // Evaluator contains information on how to evaluate a Resource
 type Evaluator struct {
-	vm *jsonnet.VM
-
+	evaluate          model.Evaluate
 	framework         *model.Framework
 	definitionSnippet string
 }
 
 // NewEvaluator initializes Evaluator
-func NewEvaluator(framework *model.Framework, vm *jsonnet.VM) (*Evaluator, model.Error) {
+func NewEvaluator(framework *model.Framework, evaluate model.Evaluate) (*Evaluator, model.Error) {
 	const defaultErrKey = "NewEvaluator"
 	if framework == nil {
 		return nil, model.BuildError(defaultErrKey, errors.New("framework is nil"))
 	}
-	if vm == nil {
-		return nil, model.BuildError(defaultErrKey, errors.New("vm is nil"))
+	if evaluate == nil {
+		return nil, model.BuildError(defaultErrKey, errors.New("evaluate is nil"))
 	}
-	definitionSnippet, err := buildAllDefinitions(vm, framework.Definitions)
+	definitionSnippet, err := buildAllDefinitions(evaluate, framework.Definitions)
 	if err != nil {
 		return nil, err
 	}
 	return &Evaluator{
-		vm:                vm,
+		evaluate:          evaluate,
 		framework:         framework,
 		definitionSnippet: definitionSnippet,
 	}, nil
@@ -53,7 +50,7 @@ func (e *Evaluator) Evaluate(resourceData *model.Data) (string, model.Error) {
 		if err != nil {
 			return model.SkipNullValue, err
 		}
-		result, evalErr := e.vm.EvaluateAnonymousSnippet(procedure.Name, snippet)
+		result, evalErr := e.evaluate(procedure.Name, snippet)
 		if evalErr != nil {
 			return model.SkipNullValue, model.BuildError(defaultErrKey, evalErr)
 		}
@@ -83,7 +80,7 @@ func (e *Evaluator) resultToError(result string) model.Error {
 	return model.BuildError(defaultErrKey, tmp)
 }
 
-func buildAllDefinitions(vm *jsonnet.VM, definitions []*model.Definition) (string, model.Error) {
+func buildAllDefinitions(evaluate model.Evaluate, definitions []*model.Definition) (string, model.Error) {
 	const defaultErrKey = "buildAllDefinitions"
 
 	wg := &sync.WaitGroup{}
@@ -94,10 +91,10 @@ func buildAllDefinitions(vm *jsonnet.VM, definitions []*model.Definition) (strin
 	for i, def := range definitions {
 		wg.Add(1)
 
-		go func(idx int, v *jsonnet.VM, w *sync.WaitGroup, m *sync.Mutex, d *model.Definition) {
+		go func(idx int, e model.Evaluate, w *sync.WaitGroup, m *sync.Mutex, d *model.Definition) {
 			defer w.Done()
 
-			defSnippet, err := buildOneDefinition(v, d)
+			defSnippet, err := buildOneDefinition(e, d)
 			if err != nil {
 				key := fmt.Sprintf("%s [%d]", defaultErrKey, idx)
 				if d != nil {
@@ -111,7 +108,7 @@ func buildAllDefinitions(vm *jsonnet.VM, definitions []*model.Definition) (strin
 				nameToSnippet[d.Name] = defSnippet
 				m.Unlock()
 			}
-		}(i, vm, wg, mtx, def)
+		}(i, evaluate, wg, mtx, def)
 
 	}
 	wg.Wait()
@@ -126,7 +123,7 @@ func buildAllDefinitions(vm *jsonnet.VM, definitions []*model.Definition) (strin
 	return fmt.Sprintf("{%s}", strings.Join(outputSnippets, "\n")), nil
 }
 
-func buildOneDefinition(vm *jsonnet.VM, definition *model.Definition) (string, model.Error) {
+func buildOneDefinition(evaluate model.Evaluate, definition *model.Definition) (string, model.Error) {
 	const defaultErrKey = "buildOneDefinition"
 	if definition == nil {
 		return model.SkipNullValue, model.BuildError(defaultErrKey, errors.New("definition is nil"))
@@ -198,7 +195,7 @@ construct (definition)
 			defSnippet,
 			string(definition.FunctionData.Content),
 		)
-		result, err := vm.EvaluateAnonymousSnippet(definition.Name, defSnippet)
+		result, err := evaluate(definition.Name, defSnippet)
 		if err != nil {
 			return model.SkipNullValue, model.BuildError(defaultErrKey, err)
 		}
@@ -216,6 +213,9 @@ func buildSnippet(
 	const defaultErrKey = "buildSnippet"
 	if procedure == nil {
 		return model.SkipNullValue, model.BuildError(defaultErrKey, errors.New("procedure is nil"))
+	}
+	if procedure.Data == nil {
+		return model.SkipNullValue, model.BuildError(defaultErrKey, errors.New("procedure data is nil"))
 	}
 	output := fmt.Sprintf(`
 /*
