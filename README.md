@@ -37,7 +37,6 @@ frameworks:
     type: file
     format: json
     path: ./example/schema/user_account_rule.json
-    output_is_error: true
   procedures:
   - name: enrich_user_account
     type: file
@@ -53,13 +52,13 @@ In this example, Resource named `user_account` will be evaluated agaist
 framework named `user_account_validation`. The targetted framework
 specifies three things:
 
-* Schema follows JSON schema format to validate the Resource. It is
+* Schema, which follows JSON schema format to validate the Resource. It is
 required to validate whether the structure for the `user_account`
 Resource contains error or not.
-* Procedure follows JSONNET format to evaluate the `user_account` Resource.
+* Procedure, which follows JSONNET format to evaluate the `user_account` Resource.
 It can be for validation or any execution that can't be handled by
 using Schema.
-* Output Target specifies on how to write the output of either Schema or
+* Output Target, which specifies on how to write the output of either Schema or
 Procedure or both.
 
 ### 3. Execute Pipeline
@@ -68,11 +67,11 @@ After the preparation is done, try running valor by executing the following
 command:
 
 ```zsh
-./out/valor
+./out/valor execute
 ```
 
 Or, if you have not build it, try building it by following [#HowToBuild](#how-to-build).
-Make sure to have the require dependencies specified under [#Dependency](#dependency).
+Make sure to have the required dependencies specified under [#Dependency](#dependency).
 The output of the above solution should look like the following:
 
 ```zsh

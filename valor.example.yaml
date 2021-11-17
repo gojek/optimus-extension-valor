@@ -13,7 +13,6 @@ frameworks:
     type: file
     format: json
     path: ./example/schema/user_account_rule.json
-    output_is_error: true
   procedures:
   - name: enrich_user_account
     type: file
