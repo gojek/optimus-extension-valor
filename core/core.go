@@ -113,22 +113,13 @@ func (p *Pipeline) Execute() model.Error {
 			fmt.Printf(" >  Validation finished\n")
 
 			fmt.Println(" >> Evaluating resource")
-			evalResults, success := p.executeEvaluate(framework, resource.ListOfData)
+			success = p.executeEvaluate(framework, resource.ListOfData, framework.OutputTargets)
 			if !success {
 				fmt.Println(" ** Evaluation failed!!!")
 				key := fmt.Sprintf("%s [evaluate: %s]", defaultErrKey, frameworkName)
 				return model.BuildError(key, errors.New("error is met during evaluation"))
 			}
 			fmt.Printf(" >  Evaluation finished\n")
-
-			fmt.Println(" >> Writing result")
-			success = p.writeOutput(evalResults, framework.OutputTargets)
-			if !success {
-				fmt.Println(" ** Writing failed!!!")
-				key := fmt.Sprintf("%s [write: %s]", defaultErrKey, frameworkName)
-				return model.BuildError(key, errors.New("error is met during write"))
-			}
-			fmt.Printf(" >  Writing finished\n")
 		}
 		fmt.Println()
 	}
@@ -182,7 +173,7 @@ func (p *Pipeline) executeValidate(framework *model.Framework, resourceData []*m
 	return success
 }
 
-func (p *Pipeline) executeEvaluate(framework *model.Framework, resourceData []*model.Data) ([]*model.Data, bool) {
+func (p *Pipeline) executeEvaluate(framework *model.Framework, resourceData []*model.Data, outputTargets []*model.OutputTarget) bool {
 	const defaultErrKey = "evaluate"
 	evaluator, err := NewEvaluator(framework, p.evaluate)
 	if err != nil {
@@ -191,7 +182,7 @@ func (p *Pipeline) executeEvaluate(framework *model.Framework, resourceData []*m
 			Content: err.JSON(),
 			Path:    defaultErrKey,
 		})
-		return nil, false
+		return false
 	}
 	progress := p.newProgress(fmt.Sprintf("%s [%s]", defaultErrKey, framework.Name), len(resourceData))
 
@@ -202,15 +193,16 @@ func (p *Pipeline) executeEvaluate(framework *model.Framework, resourceData []*m
 	counter := 0
 
 	success := true
-	outputResult := make([]*model.Data, len(resourceData))
 	for counter < len(resourceData) {
-		evalChans := make([]chan *model.Data, batch)
+		wg := &sync.WaitGroup{}
+		mtx := &sync.Mutex{}
 		for i := 0; i < batch && counter+i < len(resourceData); i++ {
+			wg.Add(1)
 			data := resourceData[counter+i]
-			ch := make(chan *model.Data)
-			go func(idx int, v *Evaluator, d *model.Data, c chan *model.Data) {
-				rst, err := v.Evaluate(d)
-				var output *model.Data
+			go func(idx int, w *sync.WaitGroup, m *sync.Mutex, d *model.Data) {
+				defer w.Done()
+				rst, err := evaluator.Evaluate(d)
+				currentSuccess := true
 				if err != nil {
 					pt := fmt.Sprintf("%s [%d]", defaultErrKey, idx)
 					if d != nil {
@@ -221,38 +213,33 @@ func (p *Pipeline) executeEvaluate(framework *model.Framework, resourceData []*m
 						Content: err.JSON(),
 						Path:    pt,
 					})
+					currentSuccess = false
 				} else {
-					output = &model.Data{
+					result := &model.Data{
 						Type:    d.Type,
 						Path:    d.Path,
 						Content: []byte(rst),
 					}
+					currentSuccess = p.writeOutput(result, outputTargets)
 				}
-				ch <- output
-			}(i, evaluator, data, ch)
-			evalChans[i] = ch
+				if !currentSuccess {
+					m.Lock()
+					success = false
+					m.Unlock()
+				}
+			}(i, wg, mtx, data)
 		}
+		wg.Wait()
 		for i := 0; i < batch && counter+i < len(resourceData); i++ {
-			rst := <-evalChans[i]
-			close(evalChans[i])
-			if rst == nil {
-				success = false
-			} else {
-				outputResult[counter+i] = rst
-			}
 			progress.Increment()
 		}
 		counter += batch
 	}
 	progress.Wait()
-
-	if success {
-		return outputResult, true
-	}
-	return nil, false
+	return success
 }
 
-func (p *Pipeline) writeOutput(evalResults []*model.Data, outputTargets []*model.OutputTarget) bool {
+func (p *Pipeline) writeOutput(result *model.Data, outputTargets []*model.OutputTarget) bool {
 	const defaultErrKey = "writeOutput"
 	formatters, err := p.getOutputFormatter(outputTargets)
 	if err != nil {
@@ -280,39 +267,34 @@ func (p *Pipeline) writeOutput(evalResults []*model.Data, outputTargets []*model
 		wg.Add(1)
 		go func(idx int, w *sync.WaitGroup, m *sync.Mutex) {
 			defer w.Done()
-			newResults := make([]*model.Data, len(evalResults))
-			currentSuccess := true
-			for j := 0; j < len(evalResults); j++ {
-				newContent, err := formatters[idx](evalResults[j].Content)
-				if err != nil {
-					errorWriter.Write(&model.Data{
-						Type:    evalResults[j].Path,
-						Path:    evalResults[j].Path,
-						Content: err.JSON(),
-					})
-					currentSuccess = false
-					continue
-				}
-				newResults[j] = &model.Data{
-					Type:    evalResults[j].Type,
-					Path:    path.Join(outputTargets[idx].Path, evalResults[j].Path),
-					Content: newContent,
-				}
-			}
-			if currentSuccess {
-				if err := writers[idx].Write(newResults...); err != nil {
-					currentSuccess = false
-					errorWriter.Write(&model.Data{
-						Type:    errorWriterType,
-						Path:    fmt.Sprintf("%s [%d]", defaultErrKey, idx),
-						Content: err.JSON(),
-					})
-				}
-			}
-			if !currentSuccess {
+			newContent, err := formatters[idx](result.Content)
+			if err != nil {
+				errorWriter.Write(&model.Data{
+					Type:    result.Type,
+					Path:    result.Path,
+					Content: err.JSON(),
+				})
 				m.Lock()
 				success = false
 				m.Unlock()
+			}
+			if !success {
+				return
+			}
+			newResult := &model.Data{
+				Type:    result.Type,
+				Path:    path.Join(outputTargets[idx].Path, result.Path),
+				Content: newContent,
+			}
+			if err := writers[idx].Write(newResult); err != nil {
+				m.Lock()
+				success = false
+				m.Unlock()
+				errorWriter.Write(&model.Data{
+					Type:    errorWriterType,
+					Path:    fmt.Sprintf("%s [%d]", defaultErrKey, idx),
+					Content: err.JSON(),
+				})
 			}
 		}(i, wg, mtx)
 	}
