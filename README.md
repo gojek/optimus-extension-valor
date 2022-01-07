@@ -8,7 +8,7 @@ Valor is a tool that can be used to validate and evaluate resource.
 
 ### 1. Clone Repo
 
-Clone this repository into your local by running the following command:
+Clone this repository into the local by running the following command:
 
 ```zsh
 git clone github.com/gojek/optimus-extension-valor
@@ -16,77 +16,91 @@ git clone github.com/gojek/optimus-extension-valor
 
 ### 2. Create Recipe
 
-Create a recipe named `valor.yaml` or rename the recipe file in
-this project directory from `valor.example.yaml` into `valor.yaml`.
-The content of the recipe should look like the following.
-Assets referred by the specified recipe are available under `./example` directory.
+Copy the recipe example `valor.example.yaml` to `valor.yaml`. The resource that will be validated and evaluated from the recipe is like the following:
 
 ```yaml
-resources: 
+resources:
 - name: user_account
-  type: file
-  path: ./example/resource/user_account.json
+  type: dir
+  path: ./example/resource
   format: json
   framework_names:
-  - user_account_validation
-
-frameworks:
-- name: user_account_validation
-  schemas:
-  - name: user_account_rule
-    type: file
-    format: json
-    path: ./example/schema/user_account_rule.json
-  procedures:
-  - name: enrich_user_account
-    type: file
-    format: jsonnet
-    path: ./example/procedure/enrich_user_account.jsonnet
-  output_targets:
-  - name: std_output
-    type: std
-    format: json
+  - user_account_evaluation
+...
 ```
 
-In this example, Resource named `user_account` will be evaluated agaist
-framework named `user_account_validation`. The targetted framework
-specifies three things:
+As stated in the recipe, the resource is available under directory `./example/resource`. One example of the resource is like the following:
 
-* Schema, which follows JSON schema format to validate the Resource. It is
-required to validate whether the structure for the `user_account`
-Resource contains error or not.
-* Procedure, which follows JSONNET format to evaluate the `user_account` Resource.
-It can be for validation or any execution that can't be handled by
-using Schema.
-* Output Target, which specifies on how to write the output of either Schema or
-Procedure or both.
+```json
+{
+    "email": "valor@github.com",
+    "membership_id": 1,
+    "is_active": true
+}
+```
 
-### 3. Execute Pipeline
+Note that the `membership_id` is in numeric.
 
-After the preparation is done, try running valor by executing the following
-command:
+### 3. Prepare Valor
+
+To execute the pipeline, one can either:
+
+* download the latest binary from [here](https://github.com/gojek/optimus-extension-valor/releases) and put it in this project directory, or
+* try building it by following [this guide](#how-to-build)
+
+### 4. Execute Pipeline
+
+After the preparation is done, try executing Valor from the CLI like the following:
 
 ```zsh
 ./out/valor execute
 ```
 
-Or, if you have not build it, try building it by following [#HowToBuild](#how-to-build).
-Make sure to have the required dependencies specified under [#Dependency](#dependency).
-The output of the above solution should look like the following:
+And done. Based on the recipe, the output will be printed to the std out, or in other words in the CLI. The output should contain one of the modified input, like the following:
 
 ```zsh
-user_account: ./example/resource/user_account.json
+...
 {
    "email": "valor@github.com",
    "is_active": true,
-   "is_valid": true,
    "membership": "premium"
 }
+...
 ```
 
-## Dependency
+### 5. Explanation
 
-### GO Language
+What Valor does is actually stated in the recipe file `valor.yaml`. Behind the scene, the process is like the following:
+
+1. read the first resource
+2. execute framework pointed by field `framework_names`
+3. in the framework, run validation based on `schemas`
+4. if no error is found, load the required definition under `definitions`
+5. if no error is found, execute proceduresstated under `procedures`
+6. if no error is found, write the result based on `output_targets`
+
+The explanation here is quite brief. For further explanation, try checkout the documentation [here](#documentation).
+
+## Documentation
+
+The complete documentation is available like the following:
+
+* [recipe](./docs/recipe.md)
+
+## Development
+
+Community contribution is very welcome. Though, because of diverse background, one might not be able to easily understand the reasoning behind every decision or approach. So, the following is the general guideline to contribute:
+
+1. create a dedicated branch
+2. after all changes are done, create a PR
+3. in that PR, please describes the issue or reasining or even approach for such changes
+4. if no issue is found, merge will be done shortly
+
+In order to follow the above steps, one might need to setup the local environment. The following is the general information to set it up.
+
+### Dependency
+
+#### GO Language
 
 The GO programming language version `go1.17.1` need to be installed
 in the system. Go to [this link](https://golang.org/doc/install) and follow
@@ -102,7 +116,7 @@ example output:
 go version go1.17.1 darwin/amd64
 ```
 
-## How to Test
+#### How to Test
 
 In this project root directory, run the following command to test:
 
@@ -117,9 +131,9 @@ make coverage
 ```
 
 You can check into `coverage.html` file in root project directory.
-This command also will open interactive coverage tool in your browser if you have one.
+This command also will open interactive coverage tool in the browser.
 
-## How to Build
+#### How to Build
 
 To build the binary executable, in this project root directory, run the following command:
 
@@ -137,7 +151,7 @@ make dist
 
 There will be a new directory named `dist` with few executable files.
 
-## How to Run
+#### How to Run
 
 In order to run this project, after building the binary executable, run
 the following command in this project root directory:
