@@ -85,7 +85,8 @@ The explanation here is quite brief. For further explanation, try checkout the d
 
 The complete documentation is available like the following:
 
-* [recipe](./docs/recipe.md)
+* [recipe](./docs/recipe.md), which explains more about recipe and how to set it up for execution
+* [command](./docs/command.md), which explains more about the available commands to be run
 
 ## Development
 
