@@ -26,6 +26,7 @@ frameworks:
     type: file
     format: jsonnet
     path: ./example/procedure/enrich_user_account.jsonnet
+    output_is_error: false
   output_targets:
   - name: std_output
     type: std

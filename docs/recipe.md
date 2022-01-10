@@ -104,6 +104,7 @@ frameworks:
     type: file
     format: jsonnet
     path: ./example/procedure/enrich_user_account.jsonnet
+    output_is_error: false
   output_targets:
   - name: std_output
     type: std
@@ -117,7 +118,7 @@ Field | Required | Description | Format | Output
 name | true | defines the name of a particular framework. | it is suggested to be descriptive and needs to follow regex _`[a-z_]+`_ | -
 [schemas](#schema) | false | defines how to validate a resource. | it is an array of `schema` that will be executed _sequentially_ and _independently_.| for each schema, the output of validation is either a success or an error message.
 [definitions](#definition) | false | definitions are data input that might be required by **procedure**. **definitions** helps evaluation to be more efficient when external data is referenced multiple times. | it is an array of `definition` that defines how a definition should be prepared. | for each definition, the output is expected to be an array of JSON object.
-procedures | false | defines how to evaluate a resource. | it is an array of `procedure` that will be executed sequentially with the ability to pass on information from one procedure to the next. | vary, dependig on how the procedure is constructed.
+[procedures](#procedure) | false | defines how to evaluate a resource. | it is an array of `procedure` that will be executed sequentially with the ability to pass on information from one procedure to the next. | vary, dependig on how the procedure is constructed.
 output_targets | false | defines how an output of validation and/or evaluation should be written out | it is an array of `output_target` that will be executed sequentially and independently. | vary, dependig on the validation and/or evaluation output
 
 ### Schema
@@ -192,22 +193,22 @@ name | the name of definition | it has to be unique within a framework only and 
 type | the type of data to be read from the path specified by **path** | currently available is `file` and `dir` | -
 format | the format being used to decode the data | currently available is `json` and `yaml` | -
 path | the path where to read the actual data from | the valid format based on the **type** | -
-function | an optional instruction to build a definition, where the instruction follows the [Jsonnet format](https://jsonnet.org/) | - | dictionary where the key is the **name** and the value is up to the actual function defined under **function.path**
+function | an optional instruction to build a definition, where the instruction follows the [Jsonnet](https://jsonnet.org/) format | - | dictionary where the key is the **name** and the value is up to the actual function defined under **function.path**
 function.type | defines the type of path specified by **function.path** | it should be valid for the given **function.path** | -
 function.path | defines the path where to read the actual function | should be valid according to the **function.type** | -
 
 _Note that every field mentioned above is mandatory unless stated otherwise._
 
-As mentionend, every definition **function** should follow [Jsonnet format](https://jsonnet.org/). Apart from that, there are a few additional rules involved when defining a definition:
+As mentionend, every definition **function** should follow [Jsonnet](https://jsonnet.org/) format. Apart from that, there are a few additional rules involved when defining a definition:
 
 * the final definition output depends on the **function**:
   * if **function** is not set, then the actual output will be a dictionary where the key is the definition name and the value is an array
   * if **function** is set, then the actual output will be a dictionary where the key is the definition name and the value is up to the actual function to define
-* every definition function should define a special Jsonnet function with the following requirement:
+* every definition function should define a special [Jsonnet](https://jsonnet.org/) function with the following requirement:
   * it has to be named `construct`
   * it accepts one parameter
-  * it output one value
-* data being passed as the parameter of Jsonnet function is the raw data, which is an array of definition object
+  * it outputs one value
+* data being passed as the parameter of [Jsonnet](https://jsonnet.org/) function is the raw data, which is an array of definition object
 * definition object is the actual data that is stored in the preferred place, such as a file
 * if the special function requires custom functions, then they should be initialized above the special function
 
@@ -244,8 +245,7 @@ The output when the definition function is not set:
             "id": 1,
             "name": "premium",
             "description": "Membership which involves payment"
-        },
-        ...
+        }
     ]
 }
 ```
@@ -254,13 +254,94 @@ When the definition function is defined where it outputs an object, then:
 
 ```json
 {
-    "memberships": { // the difference
-        {
+    "memberships": {
+        "1": {
             "id": 1,
             "name": "premium",
             "description": "Membership which involves payment"
-        },
-        ...
+        }
     }
 }
 ```
+
+## Procedure
+
+Procedure is, like the name, one or more instruction to process data. Think of it like a the GO function. Procedure uses [Jsonnet](https://jsonnet.org/) format. Even though it's similar with [definition](#definition) function in term of the format being used, it's acually different. If a [definition](#definition) function's purpose is to accept all external definition data and produces new data, then procedures's purpose is to accept every possible data and may or may not proceds new data. It might be a bit abstract, but let's take a look at its basic construct:
+
+```yaml
+...
+name: enrich_user_account
+type: file
+format: jsonnet
+path: ./example/procedure/enrich_user_account.jsonnet
+output_is_error: false
+...
+```
+
+Field | Description | Format
+--- | --- | ---
+name | the name of a procedure | it has to be unique within a framework only and should follow _`[a-z_]+`_
+type | the type of data to be read from the path specified by **path** | currently available is `file` only | -
+format | the format being used to decode the data | currently available is `jsonnet` only | -
+path | the path where to read the actual data from | the valid format based on the **type** | -
+output_is_error | indicates whether output from a procedure is considered as error or not | it is optional, with the default value is `false`, where output is not considered as error
+
+_Note that every field mentioned above is mandatory unless stated otherwise._
+
+As mentioned, procedure follows the [Jsonnet](https://jsonnet.org/) format. Though, there are some rules for it to be executed properly by Valor:
+
+* each procedure should have special [Jsonnet](https://jsonnet.org/) function named `evaluate`, which:
+  * accepts `resource`, `definition`, and `previous` parameter sequentially, and
+  * may or may not return data, depending on how the function is defined
+* `resource` parameter in `evaluate` function refers to one resource data defined under **resources**, which is in a JSON format
+* `definition` parameter in `evaluate` function refers to the whole definition defined under **definitions**, which is in the form of dictionary (JSON object) where the key is the definition name
+* `previous` parameter in `evaluate` function refers to the output of the previous procedure execution within a framework and it will be a null value if the current procedure is the first to be executed
+* any additional function which might be required by the special function should be initialized beforehand
+
+The following is an example of a procedure:
+
+```jsonnet
+local evaluate(resource, definition, previous) =
+    local membership_dict = definition['memberships'];
+    local membership_id = std.toString(resource.membership_id);
+    local current_membership = membership_dict[membership_id];
+    {
+        email: resource.email,
+        membership: current_membership.name,
+        is_active: resource.is_active
+    };
+```
+
+On the procedure above, there's only one function, which is `evalute`. Behind the scene, Valor will call this function. In the line,
+
+```jsonnet
+...
+local membership_dict = definition['memberships'];
+...
+```
+
+this function wants to extract a definition named `memberships`, and use it as a reference to process its business flow. This function may or may not use the provided parameters, and may or may not return any output. It is entirely up to the user. In the above example, this function outputs an object. And since `output_is_error` is set to be `false`, then this value will be sent to the next pipeline, which can be:
+
+* a new procedure, where this output will be sent as parameter under `previous`, or
+* an output target, where this output will be written out to output stream, or
+* nothing, where the output will not be used.
+
+## Output Target
+
+Output target defines how an output would be written. One framework can zero or more output targets. If output target is not defined, then even if procedure returns output, it won't be written out. If output target is defined, but procedure doesn't return output, then no output will be written out. The basic construct of output target is like the following:
+
+```yaml
+...
+name: std_output
+type: std
+format: json
+path: ./output
+...
+```
+
+Field | Description | Format
+--- | --- | ---
+name | the name of output target | it has to be unique within a framework only and should follow _`[a-z_]+`_
+type | the type of output target | currently available: `std` (to write to standard output) and `dir` (to write to a directory)
+format | the format for output | currently available: `json` and `yaml`
+path | the path where to write the output | only being used when the **type** is set `dir`
