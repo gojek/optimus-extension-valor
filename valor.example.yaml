@@ -1,23 +1,32 @@
-resources: 
+resources:
 - name: user_account
-  type: file
-  path: ./example/resource/user_account.json
+  type: dir
+  path: ./example/resource
   format: json
   framework_names:
-  - user_account_validation
+  - user_account_evaluation
 
 frameworks:
-- name: user_account_validation
+- name: user_account_evaluation
   schemas:
   - name: user_account_rule
     type: file
     format: json
     path: ./example/schema/user_account_rule.json
+  definitions:
+  - name: memberships
+    format: json
+    type: dir
+    path: ./example/definition
+    function:
+      type: file
+      path: ./example/procedure/construct_membership_dictionary.jsonnet
   procedures:
   - name: enrich_user_account
     type: file
     format: jsonnet
     path: ./example/procedure/enrich_user_account.jsonnet
+    output_is_error: false
   output_targets:
   - name: std_output
     type: std
