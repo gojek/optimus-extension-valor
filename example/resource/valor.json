@@ -1,5 +1,5 @@
 {
     "email": "valor@github.com",
-    "membership": "premium",
+    "membership_id": 1,
     "is_active": true
 }

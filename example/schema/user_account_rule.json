@@ -6,19 +6,16 @@
         "email": {
             "type": "string"
         },
-        "membership": {
-            "enum": [
-                "standard",
-                "premium"
-            ]
+        "membership_id": {
+            "type": "integer"
         },
         "is_active": {
             "type": "boolean"
         }
     },
     "required": [
-		"email",
-		"membership"
-	],
+        "email",
+        "membership_id"
+    ],
     "additionalProperties": false
 }
