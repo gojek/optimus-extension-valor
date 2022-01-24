@@ -9,10 +9,10 @@ import (
 	"github.com/gojek/optimus-extension-valor/registry/progress"
 )
 
-const simpleType = "simple"
+const iterativeType = "iterative"
 
-// Simple defines how a simple progress bar should be executed
-type Simple struct {
+// Iterative defines how a iterative progress bar should be executed
+type Iterative struct {
 	name  string
 	total int
 
@@ -24,7 +24,7 @@ type Simple struct {
 }
 
 // Increment increments the progress
-func (s *Simple) Increment() {
+func (s *Iterative) Increment() {
 	if s.currentCounter >= s.total || s.finished {
 		return
 	}
@@ -45,16 +45,16 @@ func (s *Simple) Increment() {
 }
 
 // Wait finishes the progress
-func (s *Simple) Wait() {
+func (s *Iterative) Wait() {
 	if !s.finished {
 		fmt.Printf("total elapsed: %v\n", time.Now().Sub(s.startTime))
 	}
 	s.finished = true
 }
 
-// NewSimple initializes a simple progress
-func NewSimple(name string, total int) *Simple {
-	return &Simple{
+// NewIterative initializes an iterative progress
+func NewIterative(name string, total int) *Iterative {
+	return &Iterative{
 		name:      name,
 		total:     total,
 		startTime: time.Now(),
@@ -62,8 +62,8 @@ func NewSimple(name string, total int) *Simple {
 }
 
 func init() {
-	err := progress.Progresses.Register(simpleType, func(name string, total int) model.Progress {
-		return NewSimple(name, total)
+	err := progress.Progresses.Register(iterativeType, func(name string, total int) model.Progress {
+		return NewIterative(name, total)
 	})
 	if err != nil {
 		panic(err)

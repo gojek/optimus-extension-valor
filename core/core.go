@@ -16,7 +16,7 @@ import (
 
 const (
 	errorWriterType     = "std"
-	defaultProgressType = "verbose"
+	defaultProgressType = "progressive"
 )
 
 var errorWriter model.Writer

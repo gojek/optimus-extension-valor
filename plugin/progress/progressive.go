@@ -10,32 +10,32 @@ import (
 	"github.com/vbauerster/mpb/v7/decor"
 )
 
-const verboseType = "verbose"
+const progressiveType = "progressive"
 
 const (
 	maxNameLength = 21
 	defaultWidth  = 64
 )
 
-// Verbose defines how a verbose progress should be executed
-type Verbose struct {
+// Progressive defines how a progressive progress should be executed
+type Progressive struct {
 	progress *mpb.Progress
 	bar      *mpb.Bar
 }
 
 // Increment increments the progress
-func (v *Verbose) Increment() {
+func (v *Progressive) Increment() {
 	v.bar.Increment()
 }
 
 // Wait finishes the progress
-func (v *Verbose) Wait() {
+func (v *Progressive) Wait() {
 	v.bar.SetTotal(0, true)
 	v.progress.Wait()
 }
 
-// NewVerbose initializes a verbose progress
-func NewVerbose(name string, total int) *Verbose {
+// NewProgressive initializes a progressive progress
+func NewProgressive(name string, total int) *Progressive {
 	name = standardize(name)
 
 	progress := mpb.New()
@@ -51,7 +51,7 @@ func NewVerbose(name string, total int) *Verbose {
 			decor.Elapsed(decor.ET_STYLE_MMSS, decor.WCSyncSpace),
 		),
 	)
-	return &Verbose{
+	return &Progressive{
 		progress: progress,
 		bar:      bar,
 	}
@@ -68,8 +68,8 @@ func standardize(input string) string {
 }
 
 func init() {
-	err := progress.Progresses.Register(verboseType, func(name string, total int) model.Progress {
-		return NewVerbose(name, total)
+	err := progress.Progresses.Register(progressiveType, func(name string, total int) model.Progress {
+		return NewProgressive(name, total)
 	})
 	if err != nil {
 		panic(err)

@@ -17,7 +17,7 @@ import (
 
 const (
 	defaultBatchSize    = 4
-	defaultProgressType = "verbose"
+	defaultProgressType = "progressive"
 )
 
 var (
