@@ -7,7 +7,6 @@ import (
 	"sync"
 
 	"github.com/gojek/optimus-extension-valor/model"
-	"github.com/gojek/optimus-extension-valor/registry/endec"
 )
 
 // Evaluator contains information on how to evaluate a Resource
@@ -57,27 +56,10 @@ func (e *Evaluator) Evaluate(resourceData *model.Data) (string, model.Error) {
 		if model.IsSkipResult[result] {
 			previousOutputSnippet = model.SkipNullValue
 		} else {
-			evalResult := e.resultToError(result)
-			if procedure.OutputIsError {
-				return model.SkipNullValue, evalResult
-			}
 			previousOutputSnippet = result
 		}
 	}
 	return previousOutputSnippet, nil
-}
-
-func (e *Evaluator) resultToError(result string) model.Error {
-	const defaultErrKey = "evaluation result"
-	fn, err := endec.Decodes.Get(jsonFormat)
-	if err != nil {
-		return err
-	}
-	var tmp interface{}
-	if err = fn([]byte(result), &tmp); err != nil {
-		return model.BuildError(defaultErrKey, errors.New(result))
-	}
-	return model.BuildError(defaultErrKey, tmp)
 }
 
 func buildAllDefinitions(evaluate model.Evaluate, definitions []*model.Definition) (string, model.Error) {

@@ -53,25 +53,28 @@ func (l *Loader) LoadFramework(rcp *recipe.Framework) (*model.Framework, model.E
 		return nil, proError
 	}
 	return &model.Framework{
-		Name:          rcp.Name,
-		Definitions:   definitions,
-		Schemas:       schemas,
-		Procedures:    procedures,
-		OutputTargets: l.convertOutputTargets(rcp.OutputTargets),
+		Name:        rcp.Name,
+		Definitions: definitions,
+		Schemas:     schemas,
+		Procedures:  procedures,
+		Output:      l.convertOutput(rcp.Output),
 	}, nil
 }
 
-func (l *Loader) convertOutputTargets(targets []*recipe.OutputTarget) []*model.OutputTarget {
-	output := make([]*model.OutputTarget, len(targets))
-	for i, t := range targets {
-		output[i] = &model.OutputTarget{
+func (l *Loader) convertOutput(output *recipe.Output) *model.Output {
+	targets := make([]*model.Target, len(output.Targets))
+	for i, t := range output.Targets {
+		targets[i] = &model.Target{
 			Name:   t.Name,
 			Format: t.Format,
 			Type:   t.Type,
 			Path:   t.Path,
 		}
 	}
-	return output
+	return &model.Output{
+		TreatAs: model.OutputTreatment(output.TreatAs),
+		Targets: targets,
+	}
 }
 
 func (l *Loader) loadAllDefinitions(rcps []*recipe.Definition) ([]*model.Definition, model.Error) {
@@ -231,9 +234,8 @@ func (l *Loader) LoadProcedure(rcp *recipe.Procedure) (*model.Procedure, model.E
 		return nil, err
 	}
 	return &model.Procedure{
-		Name:          rcp.Name,
-		OutputIsError: rcp.OutputIsError,
-		Data:          data,
+		Name: rcp.Name,
+		Data: data,
 	}, nil
 }
 

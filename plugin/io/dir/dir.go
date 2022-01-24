@@ -193,7 +193,9 @@ func init() {
 	if err != nil {
 		panic(err)
 	}
-	err = io.Writers.Register(_type, NewWriter())
+	err = io.Writers.Register(_type, func(treatment model.OutputTreatment) model.Writer {
+		return NewWriter()
+	})
 	if err != nil {
 		panic(err)
 	}

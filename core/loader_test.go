@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/gojek/optimus-extension-valor/core"
+	"github.com/gojek/optimus-extension-valor/model"
 	_ "github.com/gojek/optimus-extension-valor/plugin/formatter"
 	_ "github.com/gojek/optimus-extension-valor/plugin/io"
 	"github.com/gojek/optimus-extension-valor/recipe"
@@ -500,12 +501,15 @@ func (l *LoaderSuite) TestLoadFramework() {
 					Path: path.Join(defaulDirName, defaultValidFileName),
 				},
 			},
-			OutputTargets: []*recipe.OutputTarget{
-				{
-					Name:   "std",
-					Format: "yaml",
-					Type:   "file",
-					Path:   path.Join(defaulDirName),
+			Output: &recipe.Output{
+				TreatAs: string(model.TreatmentInfo),
+				Targets: []*recipe.Target{
+					{
+						Name:   "std",
+						Format: "yaml",
+						Type:   "file",
+						Path:   path.Join(defaulDirName),
+					},
 				},
 			},
 		}

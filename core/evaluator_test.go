@@ -98,58 +98,6 @@ func (e *EvaluatorSuite) TestEvaluate() {
 		e.NotNil(actualErr)
 	})
 
-	e.Run("should return null and unformatted error if evaluation returns random result but considered error", func() {
-		framework := &model.Framework{
-			Procedures: []*model.Procedure{
-				{
-					Name: "procecure_test",
-					Data: &model.Data{
-						Content: []byte("test content"),
-					},
-					OutputIsError: true,
-				},
-			},
-		}
-		var resourceData *model.Data = &model.Data{}
-		var evaluate model.Evaluate = func(name, snippet string) (string, error) {
-			return "test result", nil
-		}
-		evaluator, _ := core.NewEvaluator(framework, evaluate)
-
-		expectedValue := model.SkipNullValue
-
-		actualValue, actualErr := evaluator.Evaluate(resourceData)
-
-		e.Equal(expectedValue, actualValue)
-		e.NotNil(actualErr)
-	})
-
-	e.Run("should return null and formatted error if evaluation returns json result but considered error", func() {
-		framework := &model.Framework{
-			Procedures: []*model.Procedure{
-				{
-					Name: "procecure_test",
-					Data: &model.Data{
-						Content: []byte("test content"),
-					},
-					OutputIsError: true,
-				},
-			},
-		}
-		var resourceData *model.Data = &model.Data{}
-		var evaluate model.Evaluate = func(name, snippet string) (string, error) {
-			return "{\"message\": \"error\"}", nil
-		}
-		evaluator, _ := core.NewEvaluator(framework, evaluate)
-
-		expectedValue := model.SkipNullValue
-
-		actualValue, actualErr := evaluator.Evaluate(resourceData)
-
-		e.Equal(expectedValue, actualValue)
-		e.NotNil(actualErr)
-	})
-
 	e.Run("should return result and nil if no error is encountered", func() {
 		framework := &model.Framework{
 			Procedures: []*model.Procedure{

@@ -104,11 +104,12 @@ frameworks:
     type: file
     format: jsonnet
     path: ./example/procedure/enrich_user_account.jsonnet
-    output_is_error: false
-  output_targets:
-  - name: std_output
-    type: std
-    format: json
+  output:
+    treat_as: error
+    targets:
+    - name: std_output
+      type: std
+      format: yaml
 ```
 
 The following is the general constructs for a framework:
@@ -119,7 +120,7 @@ name | true | defines the name of a particular framework. | it is suggested to b
 [schemas](#schema) | false | defines how to validate a resource. | it is an array of `schema` that will be executed _sequentially_ and _independently_.| for each schema, the output of validation is either a success or an error message.
 [definitions](#definition) | false | definitions are data input that might be required by **procedure**. **definitions** helps evaluation to be more efficient when external data is referenced multiple times. | it is an array of `definition` that defines how a definition should be prepared. | for each definition, the output is expected to be an array of JSON object.
 [procedures](#procedure) | false | defines how to evaluate a resource. | it is an array of `procedure` that will be executed sequentially with the ability to pass on information from one procedure to the next. | vary, dependig on how the procedure is constructed.
-output_targets | false | defines how an output of validation and/or evaluation should be written out | it is an array of `output_target` that will be executed sequentially and independently. | vary, dependig on the validation and/or evaluation output
+[output](#output) | false | defines how the output of validation and/or evaluation should be written out | it is an object | vary, dependig on the validation and/or evaluation output
 
 ### Schema
 
@@ -274,7 +275,6 @@ name: enrich_user_account
 type: file
 format: jsonnet
 path: ./example/procedure/enrich_user_account.jsonnet
-output_is_error: false
 ...
 ```
 
@@ -284,7 +284,6 @@ name | the name of a procedure | it has to be unique within a framework only and
 type | the type of data to be read from the path specified by **path** | currently available is `file` only | -
 format | the format being used to decode the data | currently available is `jsonnet` only | -
 path | the path where to read the actual data from | the valid format based on the **type** | -
-output_is_error | indicates whether output from a procedure is considered as error or not | it is optional, with the default value is `false`, where output is not considered as error
 
 _Note that every field mentioned above is mandatory unless stated otherwise._
 
@@ -320,28 +319,37 @@ local membership_dict = definition['memberships'];
 ...
 ```
 
-this function wants to extract a definition named `memberships`, and use it as a reference to process its business flow. This function may or may not use the provided parameters, and may or may not return any output. It is entirely up to the user. In the above example, this function outputs an object. And since `output_is_error` is set to be `false`, then this value will be sent to the next pipeline, which can be:
+this function wants to extract a definition named `memberships`, and use it as a reference to process its business flow. This function may or may not use the provided parameters, and may or may not return any output. It is entirely up to the user. In the above example, this function outputs an object. If the output is set, then it will be sent to the next pipeline, which can be:
 
 * a new procedure, where this output will be sent as parameter under `previous`, or
-* an output target, where this output will be written out to output stream, or
+* an output, where this output will be written out to output stream, or
 * nothing, where the output will not be used.
 
-## Output Target
+## Output
 
-Output target defines how an output would be written. One framework can zero or more output targets. If output target is not defined, then even if procedure returns output, it won't be written out. If output target is defined, but procedure doesn't return output, then no output will be written out. The basic construct of output target is like the following:
+Output defines how an output would be written. This is optional. The following is the possible cases of the output:
+
+* if it's not being set, then even if procedure returns value, it won't be written out
+* if it is defined, but procedure doesn't return value, then no output will be written out
+* if it is set, then its `target` need to be set at least one target
+
+The basic construct of output target is like the following:
 
 ```yaml
 ...
-name: std_output
-type: std
-format: json
-path: ./output
+treat_as: error
+targets:
+- name: std_output
+    type: std
+    format: yaml
 ...
 ```
 
 Field | Description | Format
 --- | --- | ---
-name | the name of output target | it has to be unique within a framework only and should follow _`[a-z_]+`_
-type | the type of output target | currently available: `std` (to write to standard output) and `dir` (to write to a directory)
-format | the format for output | currently available: `json` and `yaml`
+treat_as | treatment that will be done for every output as the result evaluation | currently available: `info`, `warning`, `error`, `success`
+targets | defines all target output streams that will be processed sequentially but parallelly | an array containing all target streams
+targets.name | the name of output target | it has to be unique within a framework only and should follow _`[a-z_]+`_
+targets.type | the type of output target | currently available: `std` (to write to standard output) and `dir` (to write to a directory)
+targets.format | the format for output | currently available: `json` and `yaml`
 path | the path where to write the output | only being used when the **type** is set `dir`

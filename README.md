@@ -76,8 +76,8 @@ What Valor does is actually stated in the recipe file `valor.yaml`. Behind the s
 2. execute framework pointed by field `framework_names`
 3. in the framework, run validation based on `schemas`
 4. if no error is found, load the required definition under `definitions`
-5. if no error is found, execute proceduresstated under `procedures`
-6. if no error is found, write the result based on `output_targets`
+5. if no error is found, execute procedures stated under `procedures`
+6. if no error is found, write the result based on `output`
 
 The explanation here is quite brief. For further explanation, try checkout the documentation [here](#documentation).
 

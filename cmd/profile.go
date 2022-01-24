@@ -66,8 +66,10 @@ func getFrameworkTable(rcp *recipe.Recipe) *tablewriter.Table {
 		for _, p := range f.Procedures {
 			table.Append([]string{f.Name, "procedure", p.Name})
 		}
-		for _, o := range f.OutputTargets {
-			table.Append([]string{f.Name, "output", o.Name})
+		if f.Output != nil {
+			for _, o := range f.Output.Targets {
+				table.Append([]string{f.Name, "target", o.Name})
+			}
 		}
 	}
 	return table

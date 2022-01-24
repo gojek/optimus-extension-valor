@@ -22,11 +22,11 @@ const (
 var errorWriter model.Writer
 
 func init() {
-	writer, err := io.Writers.Get(errorWriterType)
+	writerFn, err := io.Writers.Get(errorWriterType)
 	if err != nil {
 		panic(err)
 	}
-	errorWriter = writer
+	errorWriter = writerFn(model.TreatmentError)
 }
 
 const (
@@ -113,7 +113,7 @@ func (p *Pipeline) Execute() model.Error {
 			fmt.Printf(" >  Validation finished\n")
 
 			fmt.Println(" >> Evaluating resource")
-			success = p.executeEvaluate(framework, resource.ListOfData, framework.OutputTargets)
+			success = p.executeEvaluate(framework, resource.ListOfData, framework.Output)
 			if !success {
 				fmt.Println(" ** Evaluation failed!!!")
 				key := fmt.Sprintf("%s [evaluate: %s]", defaultErrKey, frameworkName)
@@ -173,7 +173,7 @@ func (p *Pipeline) executeValidate(framework *model.Framework, resourceData []*m
 	return success
 }
 
-func (p *Pipeline) executeEvaluate(framework *model.Framework, resourceData []*model.Data, outputTargets []*model.OutputTarget) bool {
+func (p *Pipeline) executeEvaluate(framework *model.Framework, resourceData []*model.Data, output *model.Output) bool {
 	const defaultErrKey = "evaluate"
 	evaluator, err := NewEvaluator(framework, p.evaluate)
 	if err != nil {
@@ -215,12 +215,17 @@ func (p *Pipeline) executeEvaluate(framework *model.Framework, resourceData []*m
 					})
 					currentSuccess = false
 				} else {
-					result := &model.Data{
-						Type:    d.Type,
-						Path:    d.Path,
-						Content: []byte(rst),
+					if !model.IsSkipResult[rst] {
+						result := &model.Data{
+							Type:    d.Type,
+							Path:    d.Path,
+							Content: []byte(rst),
+						}
+						currentSuccess = p.writeOutput(result, output)
+						if currentSuccess && output.TreatAs == model.TreatmentError {
+							currentSuccess = false
+						}
 					}
-					currentSuccess = p.writeOutput(result, outputTargets)
 				}
 				if !currentSuccess {
 					m.Lock()
@@ -239,9 +244,9 @@ func (p *Pipeline) executeEvaluate(framework *model.Framework, resourceData []*m
 	return success
 }
 
-func (p *Pipeline) writeOutput(result *model.Data, outputTargets []*model.OutputTarget) bool {
+func (p *Pipeline) writeOutput(result *model.Data, output *model.Output) bool {
 	const defaultErrKey = "writeOutput"
-	formatters, err := p.getOutputFormatter(outputTargets)
+	formatters, err := p.getOutputFormatters(output)
 	if err != nil {
 		errorWriter.Write(&model.Data{
 			Type:    errorWriterType,
@@ -250,7 +255,7 @@ func (p *Pipeline) writeOutput(result *model.Data, outputTargets []*model.Output
 		})
 		return false
 	}
-	writers, err := p.getOutputWriter(outputTargets)
+	writers, err := p.getOutputWriters(output)
 	if err != nil {
 		errorWriter.Write(&model.Data{
 			Type:    errorWriterType,
@@ -263,7 +268,7 @@ func (p *Pipeline) writeOutput(result *model.Data, outputTargets []*model.Output
 	mtx := &sync.Mutex{}
 
 	success := true
-	for i := 0; i < len(outputTargets); i++ {
+	for i := 0; i < len(output.Targets); i++ {
 		wg.Add(1)
 		go func(idx int, w *sync.WaitGroup, m *sync.Mutex) {
 			defer w.Done()
@@ -283,7 +288,7 @@ func (p *Pipeline) writeOutput(result *model.Data, outputTargets []*model.Output
 			}
 			newResult := &model.Data{
 				Type:    result.Type,
-				Path:    path.Join(outputTargets[idx].Path, result.Path),
+				Path:    path.Join(output.Targets[idx].Path, result.Path),
 				Content: newContent,
 			}
 			if err := writers[idx].Write(newResult); err != nil {
@@ -302,18 +307,18 @@ func (p *Pipeline) writeOutput(result *model.Data, outputTargets []*model.Output
 	return success
 }
 
-func (p *Pipeline) getOutputWriter(target []*model.OutputTarget) ([]model.Writer, model.Error) {
-	const defaultErrKey = "getOutputFormatter"
-	outputWriter := make([]model.Writer, len(target))
+func (p *Pipeline) getOutputWriters(output *model.Output) ([]model.Writer, model.Error) {
+	const defaultErrKey = "getOutputWriters"
+	outputWriter := make([]model.Writer, len(output.Targets))
 	outputError := make(model.Error)
-	for i, t := range target {
+	for i, t := range output.Targets {
 		fn, err := io.Writers.Get(t.Type)
 		if err != nil {
 			key := fmt.Sprintf("%s [%d]", defaultErrKey, i)
 			outputError[key] = err
 			continue
 		}
-		outputWriter[i] = fn
+		outputWriter[i] = fn(output.TreatAs)
 	}
 	if len(outputError) > 0 {
 		return nil, outputError
@@ -321,11 +326,11 @@ func (p *Pipeline) getOutputWriter(target []*model.OutputTarget) ([]model.Writer
 	return outputWriter, nil
 }
 
-func (p *Pipeline) getOutputFormatter(target []*model.OutputTarget) ([]model.Format, model.Error) {
-	const defaultErrKey = "getOutputFormatter"
-	outputFormat := make([]model.Format, len(target))
+func (p *Pipeline) getOutputFormatters(output *model.Output) ([]model.Format, model.Error) {
+	const defaultErrKey = "getOutputFormatters"
+	outputFormat := make([]model.Format, len(output.Targets))
 	outputError := make(model.Error)
-	for i, t := range target {
+	for i, t := range output.Targets {
 		fn, err := formatter.Formats.Get(jsonFormat, t.Format)
 		if err != nil {
 			key := fmt.Sprintf("%s [%d]", defaultErrKey, i)
