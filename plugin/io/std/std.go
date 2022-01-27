@@ -1,6 +1,7 @@
 package std
 
 import (
+	"errors"
 	"os"
 	"strings"
 
@@ -17,8 +18,10 @@ type Std struct {
 	treatment model.OutputTreatment
 }
 
-func (s *Std) Write(dataList ...*model.Data) model.Error {
-	const defaultErrKey = "Write"
+func (s *Std) Write(data *model.Data) error {
+	if data == nil {
+		return errors.New("data is nil")
+	}
 	color.NoColor = false
 	var colorize *color.Color
 	switch s.treatment {
@@ -31,15 +34,15 @@ func (s *Std) Write(dataList ...*model.Data) model.Error {
 	default:
 		colorize = color.New(color.FgHiWhite)
 	}
-	for _, d := range dataList {
-		separator := strings.Repeat("-", len(d.Path))
-		output := colorize.Sprintf("%s\n%s\n%s\n%s\n", separator, d.Path, separator, string(d.Content))
-		_, err := os.Stdout.WriteString(output)
-		if err != nil {
-			return model.BuildError(defaultErrKey, err)
-		}
-	}
-	return nil
+	separator := strings.Repeat("-", len(data.Path))
+	output := colorize.Sprintf("%s\n%s\n%s\n%s\n",
+		separator,
+		data.Path,
+		separator,
+		string(data.Content),
+	)
+	_, err := os.Stdout.WriteString(output)
+	return err
 }
 
 // New initializes standard input and output

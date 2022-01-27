@@ -23,12 +23,16 @@ type Iterative struct {
 	startTime time.Time
 }
 
-// Increment increments the progress
-func (s *Iterative) Increment() {
+// Increase increases the progress by the number
+func (s *Iterative) Increase(num int) {
 	if s.currentCounter >= s.total || s.finished {
 		return
 	}
-	s.currentCounter++
+	increment := num
+	if s.currentCounter+increment > s.total {
+		increment = s.total - s.currentCounter
+	}
+	s.currentCounter += increment
 
 	currentPercentage := 100 * s.currentCounter / s.total
 	if currentPercentage > s.previousPercentage {

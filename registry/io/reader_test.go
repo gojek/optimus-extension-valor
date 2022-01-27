@@ -27,7 +27,7 @@ func (r *ReaderFactorySuite) TestRegister() {
 	r.Run("should return error fn is already registered", func() {
 		factory := io.NewReaderFactory()
 		_type := "file"
-		var fn io.ReaderFn = func(getPath model.GetPath, filterPath model.FilterPath, postProcess model.PostProcess) model.Reader {
+		var fn io.ReaderFn = func(getPath model.GetPath, postProcess model.PostProcess) model.Reader {
 			return nil
 		}
 		factory.Register(_type, fn)
@@ -40,7 +40,7 @@ func (r *ReaderFactorySuite) TestRegister() {
 	r.Run("should return nil if no error is found", func() {
 		factory := io.NewReaderFactory()
 		_type := "file"
-		var fn io.ReaderFn = func(getPath model.GetPath, filterPath model.FilterPath, postProcess model.PostProcess) model.Reader {
+		var fn io.ReaderFn = func(getPath model.GetPath, postProcess model.PostProcess) model.Reader {
 			return nil
 		}
 
@@ -54,7 +54,7 @@ func (r *ReaderFactorySuite) TestGet() {
 	r.Run("should return nil and error type is not found", func() {
 		factory := io.NewReaderFactory()
 		_type := "file"
-		var fn io.ReaderFn = func(getPath model.GetPath, filterPath model.FilterPath, postProcess model.PostProcess) model.Reader {
+		var fn io.ReaderFn = func(getPath model.GetPath, postProcess model.PostProcess) model.Reader {
 			return nil
 		}
 		factory.Register(_type, fn)
@@ -68,7 +68,7 @@ func (r *ReaderFactorySuite) TestGet() {
 	r.Run("should return fn and nil type is found found", func() {
 		factory := io.NewReaderFactory()
 		_type := "file"
-		var fn io.ReaderFn = func(getPath model.GetPath, filterPath model.FilterPath, postProcess model.PostProcess) model.Reader {
+		var fn io.ReaderFn = func(getPath model.GetPath, postProcess model.PostProcess) model.Reader {
 			return nil
 		}
 		factory.Register(_type, fn)

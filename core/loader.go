@@ -3,7 +3,6 @@ package core
 import (
 	"errors"
 	"fmt"
-	"strings"
 	"sync"
 
 	"github.com/gojek/optimus-extension-valor/model"
@@ -16,30 +15,11 @@ import (
 type Loader struct {
 }
 
-// LoadResource loads a Resource based on its recipe
-func (l *Loader) LoadResource(rcp *recipe.Resource) (*model.Resource, model.Error) {
-	const defaultErrKey = "LoadResource"
+// LoadFramework loads framework based on the specified recipe
+func (l *Loader) LoadFramework(rcp *recipe.Framework) (*model.Framework, error) {
 	if rcp == nil {
-		return nil, model.BuildError(defaultErrKey, errors.New("resource recipe is nil"))
+		return nil, errors.New("framework recipe is nil")
 	}
-	listOfData, err := l.loadAllData(rcp.Path, rcp.Type, rcp.Format)
-	if err != nil {
-		return nil, err
-	}
-	return &model.Resource{
-		Name:           rcp.Name,
-		ListOfData:     listOfData,
-		FrameworkNames: rcp.FrameworkNames,
-	}, nil
-}
-
-// LoadFramework loads a framework based on its recipe
-func (l *Loader) LoadFramework(rcp *recipe.Framework) (*model.Framework, model.Error) {
-	const defaultErrKey = "LoadFramework"
-	if rcp == nil {
-		return nil, model.BuildError(defaultErrKey, errors.New("framework recipe is nil"))
-	}
-
 	definitions, defError := l.loadAllDefinitions(rcp.Definitions)
 	if defError != nil {
 		return nil, defError
@@ -57,11 +37,67 @@ func (l *Loader) LoadFramework(rcp *recipe.Framework) (*model.Framework, model.E
 		Definitions: definitions,
 		Schemas:     schemas,
 		Procedures:  procedures,
-		Output:      l.convertOutput(rcp.Output),
+	}, nil
+}
+
+func (l *Loader) loadAllProcedures(rcps []*recipe.Procedure) ([]*model.Procedure, model.Error) {
+	wg := &sync.WaitGroup{}
+	mtx := &sync.Mutex{}
+
+	outputData := make([]*model.Procedure, len(rcps))
+	outputError := make(model.Error)
+	for i, rcp := range rcps {
+		wg.Add(1)
+		go func(idx int, w *sync.WaitGroup, m *sync.Mutex, r *recipe.Procedure) {
+			defer wg.Done()
+
+			procedure, err := l.LoadProcedure(r)
+			if err != nil {
+				m.Lock()
+				outputError[r.Name] = err
+				m.Unlock()
+			} else {
+				m.Lock()
+				outputData[idx] = procedure
+				m.Unlock()
+			}
+		}(i, wg, mtx, rcp)
+	}
+	wg.Wait()
+
+	if len(outputError) > 0 {
+		return nil, outputError
+	}
+	return outputData, nil
+}
+
+// LoadProcedure loads procedure based on the specified recipe
+func (l *Loader) LoadProcedure(rcp *recipe.Procedure) (*model.Procedure, error) {
+	if rcp == nil {
+		return nil, errors.New("procedure recipe is nil")
+	}
+	paths, err := ExplorePaths(rcp.Path, rcp.Type, jsonnetFormat)
+	if err != nil {
+		return nil, err
+	}
+	if len(paths) == 0 {
+		return nil, fmt.Errorf("cannot read procedure from recipe [%s]", rcp.Name)
+	}
+	data, err := l.LoadData(paths[0], rcp.Type, jsonnetFormat)
+	if err != nil {
+		return nil, err
+	}
+	return &model.Procedure{
+		Name:   rcp.Name,
+		Data:   data,
+		Output: l.convertOutput(rcp.Output),
 	}, nil
 }
 
 func (l *Loader) convertOutput(output *recipe.Output) *model.Output {
+	if output == nil {
+		return nil
+	}
 	targets := make([]*model.Target, len(output.Targets))
 	for i, t := range output.Targets {
 		targets[i] = &model.Target{
@@ -77,9 +113,58 @@ func (l *Loader) convertOutput(output *recipe.Output) *model.Output {
 	}
 }
 
-func (l *Loader) loadAllDefinitions(rcps []*recipe.Definition) ([]*model.Definition, model.Error) {
-	const defaultErrKey = "loadAllDefinitions"
+func (l *Loader) loadAllSchemas(rcps []*recipe.Schema) ([]*model.Schema, model.Error) {
+	wg := &sync.WaitGroup{}
+	mtx := &sync.Mutex{}
 
+	outputData := make([]*model.Schema, len(rcps))
+	outputError := make(model.Error)
+	for i, rcp := range rcps {
+		wg.Add(1)
+		go func(idx int, w *sync.WaitGroup, m *sync.Mutex, r *recipe.Schema) {
+			defer wg.Done()
+
+			schema, err := l.LoadSchema(r)
+			if err != nil {
+				m.Lock()
+				outputError[r.Name] = err
+				m.Unlock()
+			} else {
+				m.Lock()
+				outputData[idx] = schema
+				m.Unlock()
+			}
+		}(i, wg, mtx, rcp)
+	}
+	wg.Wait()
+
+	if len(outputError) > 0 {
+		return nil, outputError
+	}
+	return outputData, nil
+}
+
+// LoadSchema loads schema based on the specified recipe
+func (l *Loader) LoadSchema(rcp *recipe.Schema) (*model.Schema, error) {
+	if rcp == nil {
+		return nil, errors.New("schema recipe is nil")
+	}
+	paths, err := ExplorePaths(rcp.Path, rcp.Type, jsonFormat)
+	if err != nil {
+		return nil, err
+	}
+	if len(paths) == 0 {
+		return nil, fmt.Errorf("cannot read schema from recipe [%s]", rcp.Name)
+	}
+	data, err := l.LoadData(paths[0], rcp.Type, jsonFormat)
+	return &model.Schema{
+		Name:   rcp.Name,
+		Data:   data,
+		Output: l.convertOutput(rcp.Output),
+	}, nil
+}
+
+func (l *Loader) loadAllDefinitions(rcps []*recipe.Definition) ([]*model.Definition, error) {
 	wg := &sync.WaitGroup{}
 	mtx := &sync.Mutex{}
 
@@ -90,10 +175,12 @@ func (l *Loader) loadAllDefinitions(rcps []*recipe.Definition) ([]*model.Definit
 
 		go func(idx int, w *sync.WaitGroup, m *sync.Mutex, r *recipe.Definition) {
 			defer wg.Done()
-
 			definition, err := l.LoadDefinition(r)
 			if err != nil {
-				key := fmt.Sprintf("%s [%d]", defaultErrKey, idx)
+				key := fmt.Sprintf("%d", idx)
+				if r != nil {
+					key = r.Name
+				}
 				m.Lock()
 				outputError[key] = err
 				m.Unlock()
@@ -112,89 +199,26 @@ func (l *Loader) loadAllDefinitions(rcps []*recipe.Definition) ([]*model.Definit
 	return outputData, nil
 }
 
-func (l *Loader) loadAllSchemas(rcps []*recipe.Schema) ([]*model.Schema, model.Error) {
-	const defaultErrKey = "loadAllSchemas"
-
-	wg := &sync.WaitGroup{}
-	mtx := &sync.Mutex{}
-
-	outputData := make([]*model.Schema, len(rcps))
-	outputError := make(model.Error)
-	for i, rcp := range rcps {
-		wg.Add(1)
-
-		go func(idx int, w *sync.WaitGroup, m *sync.Mutex, r *recipe.Schema) {
-			defer wg.Done()
-
-			schema, err := l.LoadSchema(r)
-			if err != nil {
-				key := fmt.Sprintf("%s [%d]", defaultErrKey, idx)
-				m.Lock()
-				outputError[key] = err
-				m.Unlock()
-			} else {
-				m.Lock()
-				outputData[idx] = schema
-				m.Unlock()
-			}
-		}(i, wg, mtx, rcp)
-	}
-	wg.Wait()
-
-	if len(outputError) > 0 {
-		return nil, outputError
-	}
-	return outputData, nil
-}
-
-func (l *Loader) loadAllProcedures(rcps []*recipe.Procedure) ([]*model.Procedure, model.Error) {
-	const defaultErrKey = "loadAllProcedures"
-
-	wg := &sync.WaitGroup{}
-	mtx := &sync.Mutex{}
-
-	outputData := make([]*model.Procedure, len(rcps))
-	outputError := make(model.Error)
-	for i, rcp := range rcps {
-		wg.Add(1)
-
-		go func(idx int, w *sync.WaitGroup, m *sync.Mutex, r *recipe.Procedure) {
-			defer wg.Done()
-
-			procedure, err := l.LoadProcedure(r)
-			if err != nil {
-				key := fmt.Sprintf("%s [%d]", defaultErrKey, idx)
-				m.Lock()
-				outputError[key] = err
-				m.Unlock()
-			} else {
-				m.Lock()
-				outputData[idx] = procedure
-				m.Unlock()
-			}
-		}(i, wg, mtx, rcp)
-	}
-	wg.Wait()
-
-	if len(outputError) > 0 {
-		return nil, outputError
-	}
-	return outputData, nil
-}
-
-// LoadDefinition loads definition based on its recipe
-func (l *Loader) LoadDefinition(rcp *recipe.Definition) (*model.Definition, model.Error) {
-	const defaultErrKey = "LoadDefinition"
+// LoadDefinition loads definition based on the specified recipe
+func (l *Loader) LoadDefinition(rcp *recipe.Definition) (*model.Definition, error) {
 	if rcp == nil {
-		return nil, model.BuildError(defaultErrKey, errors.New("definition recipe is nil"))
+		return nil, errors.New("definition recipe is nil")
 	}
-	listOfData, err := l.loadAllData(rcp.Path, rcp.Type, rcp.Format)
+	paths, err := ExplorePaths(rcp.Path, rcp.Type, rcp.Format)
 	if err != nil {
 		return nil, err
 	}
+	listOfData := make([]*model.Data, len(paths))
+	for i, p := range paths {
+		data, err := l.LoadData(p, rcp.Type, rcp.Format)
+		if err != nil {
+			return nil, err
+		}
+		listOfData[i] = data
+	}
 	var functionData *model.Data
 	if rcp.Function != nil {
-		data, err := l.loadOneData(rcp.Function.Path, rcp.Function.Type, jsonnetFormat)
+		data, err := l.LoadData(rcp.Function.Path, rcp.Function.Type, jsonnetFormat)
 		if err != nil {
 			return nil, err
 		}
@@ -207,102 +231,42 @@ func (l *Loader) LoadDefinition(rcp *recipe.Definition) (*model.Definition, mode
 	}, nil
 }
 
-// LoadSchema loads schema based on its recipe
-func (l *Loader) LoadSchema(rcp *recipe.Schema) (*model.Schema, model.Error) {
-	const defaultErrKey = "LoadSchema"
-	if rcp == nil {
-		return nil, model.BuildError(defaultErrKey, errors.New("schema recipe is nil"))
-	}
-	data, err := l.loadOneData(rcp.Path, rcp.Type, jsonFormat)
+// LoadData loads data based on the specified path, type, and format
+func (l *Loader) LoadData(path, _type, format string) (*model.Data, error) {
+	reader, err := l.getReader(path, _type, format)
 	if err != nil {
 		return nil, err
 	}
-	return &model.Schema{
-		Name: rcp.Name,
-		Data: data,
-	}, nil
+	return reader.Read()
 }
 
-// LoadProcedure loads procedure based on its recipe
-func (l *Loader) LoadProcedure(rcp *recipe.Procedure) (*model.Procedure, model.Error) {
-	const defaultErrKey = "LoadProcedure"
-	if rcp == nil {
-		return nil, model.BuildError(defaultErrKey, errors.New("procedure recipe is nil"))
-	}
-	data, err := l.loadOneData(rcp.Path, rcp.Type, jsonnetFormat)
-	if err != nil {
-		return nil, err
-	}
-	return &model.Procedure{
-		Name: rcp.Name,
-		Data: data,
-	}, nil
-}
-
-func (l *Loader) loadOneData(path, _type, format string) (*model.Data, model.Error) {
-	reader, err := l.getLoadReader(path, _type, format)
-	if err != nil {
-		return nil, err
-	}
-	return reader.ReadOne()
-}
-
-func (l *Loader) loadAllData(path, _type, format string) ([]*model.Data, model.Error) {
-	const defaultErrKey = "loadAllData"
-	reader, err := l.getLoadReader(path, _type, format)
-	if err != nil {
-		return nil, err
-	}
-	data, err := reader.ReadAll()
-	if err != nil {
-		return nil, err
-	}
-	return data, nil
-}
-
-func (l *Loader) getLoadReader(path, _type, format string) (model.Reader, model.Error) {
-	const defaultErrKey = "getLoadReader"
+func (l *Loader) getReader(path, _type, format string) (model.Reader, error) {
 	readerFn, err := io.Readers.Get(_type)
 	if err != nil {
 		return nil, err
 	}
 	reader := readerFn(
-		l.getPath(path),
-		l.filterPath(format),
-		l.postProcess(_type, format),
+		func() string {
+			return path
+		},
+		func(path string, content []byte) (*model.Data, error) {
+			if !skipReformat[format] {
+				fn, err := formatter.Formats.Get(format, jsonFormat)
+				if err != nil {
+					return nil, err
+				}
+				reformattedContent, err := fn(content)
+				if err != nil {
+					return nil, err
+				}
+				content = reformattedContent
+			}
+			return &model.Data{
+				Path:    path,
+				Type:    _type,
+				Content: content,
+			}, nil
+		},
 	)
 	return reader, nil
-}
-
-func (l *Loader) getPath(path string) model.GetPath {
-	return func() string {
-		return path
-	}
-}
-
-func (l *Loader) filterPath(suffix string) model.FilterPath {
-	return func(path string) bool {
-		return strings.HasSuffix(path, suffix)
-	}
-}
-
-func (l *Loader) postProcess(_type, format string) model.PostProcess {
-	return func(path string, content []byte) (*model.Data, model.Error) {
-		if !skipReformat[format] {
-			fn, err := formatter.Formats.Get(format, jsonFormat)
-			if err != nil {
-				return nil, err
-			}
-			reformattedContent, err := fn(content)
-			if err != nil {
-				return nil, err
-			}
-			content = reformattedContent
-		}
-		return &model.Data{
-			Path:    path,
-			Type:    _type,
-			Content: content,
-		}, nil
-	}
 }

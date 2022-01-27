@@ -3,6 +3,8 @@ package file
 import (
 	"errors"
 	"io/ioutil"
+	"os"
+	"path"
 
 	"github.com/gojek/optimus-extension-valor/model"
 	"github.com/gojek/optimus-extension-valor/registry/io"
@@ -16,42 +18,39 @@ type File struct {
 	postProcess model.PostProcess
 }
 
-// ReadOne reads one file from a path
-func (f *File) ReadOne() (*model.Data, model.Error) {
-	const defaultErrKey = "ReadOne"
+// Read reads file from a path
+func (f *File) Read() (*model.Data, error) {
 	if err := f.validate(); err != nil {
 		return nil, err
 	}
 	path := f.getPath()
 	content, err := ioutil.ReadFile(path)
 	if err != nil {
-		return nil, model.BuildError(defaultErrKey, err)
+		return nil, err
 	}
 	return f.postProcess(path, content)
 }
 
-// ReadAll reads one file from a path but is returned as a slice
-func (f *File) ReadAll() ([]*model.Data, model.Error) {
-	const defaultErrKey = "ReadAll"
-	if err := f.validate(); err != nil {
-		return nil, err
-	}
-	data, err := f.ReadOne()
-	if err != nil {
-		return nil, err
-	}
-	return []*model.Data{data}, nil
-}
-
-func (f *File) validate() model.Error {
-	const defaultErrKey = "validate"
+func (f *File) validate() error {
 	if f.getPath == nil {
-		return model.BuildError(defaultErrKey, errors.New("getPath is nil"))
+		return errors.New("getPath is nil")
 	}
 	if f.postProcess == nil {
-		return model.BuildError(defaultErrKey, errors.New("postProcess is nil"))
+		return errors.New("postProcess is nil")
 	}
 	return nil
+}
+
+// Write writes data to destination
+func (f *File) Write(data *model.Data) error {
+	if data == nil {
+		return errors.New("data is nil")
+	}
+	dirPath, _ := path.Split(data.Path)
+	if err := os.MkdirAll(dirPath, os.ModePerm); err != nil {
+		return err
+	}
+	return ioutil.WriteFile(data.Path, data.Content, os.ModePerm)
 }
 
 // New initializes File based on path
@@ -63,14 +62,18 @@ func New(getPath model.GetPath, postProcess model.PostProcess) *File {
 }
 
 func init() {
-	err := io.Readers.Register(_type, func(
-		getPath model.GetPath,
-		filterPath model.FilterPath,
-		postProcess model.PostProcess,
-	) model.Reader {
-		return New(getPath, postProcess)
-	})
-	if err != nil {
+	if err := io.Readers.Register(_type,
+		func(getPath model.GetPath, postProcess model.PostProcess) model.Reader {
+			return New(getPath, postProcess)
+		},
+	); err != nil {
+		panic(err)
+	}
+	if err := io.Writers.Register(_type,
+		func(treatment model.OutputTreatment) model.Writer {
+			return New(nil, nil)
+		},
+	); err != nil {
 		panic(err)
 	}
 }

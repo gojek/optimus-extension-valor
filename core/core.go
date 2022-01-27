@@ -3,21 +3,15 @@ package core
 import (
 	"errors"
 	"fmt"
-	"path"
-	"strings"
 	"sync"
 
 	"github.com/gojek/optimus-extension-valor/model"
 	_ "github.com/gojek/optimus-extension-valor/plugin/io" // init error writer
 	"github.com/gojek/optimus-extension-valor/recipe"
-	"github.com/gojek/optimus-extension-valor/registry/formatter"
 	"github.com/gojek/optimus-extension-valor/registry/io"
 )
 
-const (
-	errorWriterType     = "std"
-	defaultProgressType = "progressive"
-)
+const errorWriterType = "std"
 
 var errorWriter model.Writer
 
@@ -53,13 +47,21 @@ type Pipeline struct {
 // NewPipeline initializes pipeline process
 func NewPipeline(
 	rcp *recipe.Recipe,
-	batchSize int,
 	evaluate model.Evaluate,
+	batchSize int,
 	newProgress model.NewProgress,
-) (*Pipeline, model.Error) {
-	const defaultErrKey = "NewPipeline"
+) (*Pipeline, error) {
 	if rcp == nil {
-		return nil, model.BuildError(defaultErrKey, errors.New("recipe is nil"))
+		return nil, errors.New("recipe is nil")
+	}
+	if evaluate == nil {
+		return nil, errors.New("evaluate function is nil")
+	}
+	if batchSize < 0 {
+		return nil, errors.New("batch size should be at least zero")
+	}
+	if newProgress == nil {
+		return nil, errors.New("new progress function is nil")
 	}
 	nameToFrameworkRecipe := make(map[string]*recipe.Framework)
 	for _, frameworkRcp := range rcp.Frameworks {
@@ -76,271 +78,207 @@ func NewPipeline(
 }
 
 // Execute executes pipeline process
-func (p *Pipeline) Execute() model.Error {
-	const defaultErrKey = "Execute"
+func (p *Pipeline) Execute() error {
 	for _, resourceRcp := range p.recipe.Resources {
-		decorate := strings.Repeat("=", 12)
-		fmt.Printf("%s PROCESSING RESOURCE [%s] %s\n", decorate, resourceRcp.Name, decorate)
-
-		fmt.Println("> Loading resource")
-		resource, err := p.loader.LoadResource(resourceRcp)
-		if err != nil {
-			fmt.Println("* Loading failed!!!")
+		if err := p.validateFrameworkNames(resourceRcp); err != nil {
 			return err
 		}
-		fmt.Printf("> Loading finished\n")
-
-		for _, frameworkName := range resource.FrameworkNames {
-			decorate := strings.Repeat(":", 5)
-			fmt.Printf("%s Processing Framework [%s] %s\n", decorate, frameworkName, decorate)
-			frameworkRcp := p.nameToFrameworkRecipe[frameworkName]
-
-			fmt.Println(" >> Loading framework")
-			framework, err := p.loader.LoadFramework(frameworkRcp)
-			if err != nil {
-				fmt.Println(" ** Loading failed!!!")
-				return err
-			}
-			fmt.Printf(" >  Loading finished\n")
-
-			fmt.Println(" >> Validating resource")
-			success := p.executeValidate(framework, resource.ListOfData)
-			if !success {
-				fmt.Println(" ** Validation failed!!!")
-				key := fmt.Sprintf("%s [validate: %s]", defaultErrKey, frameworkName)
-				return model.BuildError(key, errors.New("error is met during validation"))
-			}
-			fmt.Printf(" >  Validation finished\n")
-
-			fmt.Println(" >> Evaluating resource")
-			success = p.executeEvaluate(framework, resource.ListOfData, framework.Output)
-			if !success {
-				fmt.Println(" ** Evaluation failed!!!")
-				key := fmt.Sprintf("%s [evaluate: %s]", defaultErrKey, frameworkName)
-				return model.BuildError(key, errors.New("error is met during evaluation"))
-			}
-			fmt.Printf(" >  Evaluation finished\n")
+		nameToFramework, err := p.getNameToFramework(resourceRcp)
+		if err != nil {
+			return err
 		}
-		fmt.Println()
+		nameToValidator, err := p.getNameToValidator(nameToFramework)
+		if err != nil {
+			return err
+		}
+		nameToEvaluator, err := p.getNameToEvaluator(nameToFramework)
+		if err != nil {
+			return err
+		}
+		if err := p.executeResource(resourceRcp, nameToValidator, nameToEvaluator); err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
-func (p *Pipeline) executeValidate(framework *model.Framework, resourceData []*model.Data) bool {
-	const defaultErrKey = "validate"
-	validator, err := NewValidator(framework)
+func (p *Pipeline) executeResource(resourceRcp *recipe.Resource, nameToValidator map[string]*Validator, nameToEvaluator map[string]*Evaluator) error {
+	if resourceRcp == nil {
+		return errors.New("resource recipe is nil")
+	}
+	resourcePaths, err := ExplorePaths(resourceRcp.Path, resourceRcp.Type, resourceRcp.Format)
 	if err != nil {
-		errorWriter.Write(&model.Data{
-			Type:    errorWriterType,
-			Content: err.JSON(),
-			Path:    defaultErrKey,
-		})
-		return false
+		return err
 	}
-	progress := p.newProgress(fmt.Sprintf("%s [%s]", defaultErrKey, framework.Name), len(resourceData))
-	wg := &sync.WaitGroup{}
-	mtx := &sync.Mutex{}
+	outputError := make(model.Error)
 
-	success := true
-	for i, data := range resourceData {
-		wg.Add(1)
-		go func(idx int, v *Validator, w *sync.WaitGroup, m *sync.Mutex, d *model.Data) {
-			defer w.Done()
-			if err := v.Validate(d); err != nil {
-				m.Lock()
-				success = false
-				m.Unlock()
-
-				pt := fmt.Sprintf("%s [%d]", defaultErrKey, idx)
-				if d != nil {
-					pt = fmt.Sprintf("%s [%s]", defaultErrKey, d.Path)
-				}
-				errorWriter.Write(&model.Data{
-					Type:    errorWriterType,
-					Content: err.JSON(),
-					Path:    pt,
-				})
-			}
-			if success {
-				m.Lock()
-				progress.Increment()
-				m.Unlock()
-			}
-		}(i, validator, wg, mtx, data)
-	}
-	wg.Wait()
-	progress.Wait()
-	return success
-}
-
-func (p *Pipeline) executeEvaluate(framework *model.Framework, resourceData []*model.Data, output *model.Output) bool {
-	const defaultErrKey = "evaluate"
-	evaluator, err := NewEvaluator(framework, p.evaluate)
-	if err != nil {
-		errorWriter.Write(&model.Data{
-			Type:    errorWriterType,
-			Content: err.JSON(),
-			Path:    defaultErrKey,
-		})
-		return false
-	}
-	progress := p.newProgress(fmt.Sprintf("%s [%s]", defaultErrKey, framework.Name), len(resourceData))
-
+	progress := p.newProgress(resourceRcp.Name, len(resourcePaths))
 	batch := p.batchSize
-	if batch <= 0 || batch >= len(resourceData) {
-		batch = len(resourceData)
+	if batch == 0 || batch >= len(resourcePaths) {
+		batch = len(resourcePaths)
 	}
 	counter := 0
-
-	success := true
-	for counter < len(resourceData) {
+	for counter < len(resourcePaths) {
 		wg := &sync.WaitGroup{}
 		mtx := &sync.Mutex{}
-		for i := 0; i < batch && counter+i < len(resourceData); i++ {
+
+		for i := 0; i < batch && counter+i < len(resourcePaths); i++ {
 			wg.Add(1)
-			data := resourceData[counter+i]
-			go func(idx int, w *sync.WaitGroup, m *sync.Mutex, d *model.Data) {
+
+			idx := counter + i
+			go func(pt string, w *sync.WaitGroup, m *sync.Mutex) {
 				defer w.Done()
-				rst, err := evaluator.Evaluate(d)
-				currentSuccess := true
+				data, err := p.loader.LoadData(pt, resourceRcp.Type, resourceRcp.Format)
 				if err != nil {
-					pt := fmt.Sprintf("%s [%d]", defaultErrKey, idx)
-					if d != nil {
-						pt = d.Path
-					}
-					errorWriter.Write(&model.Data{
-						Type:    errorWriterType,
-						Content: err.JSON(),
-						Path:    pt,
-					})
-					currentSuccess = false
-				} else {
-					if !model.IsSkipResult[rst] {
-						result := &model.Data{
-							Type:    d.Type,
-							Path:    d.Path,
-							Content: []byte(rst),
-						}
-						currentSuccess = p.writeOutput(result, output)
-						if currentSuccess && output.TreatAs == model.TreatmentError {
-							currentSuccess = false
-						}
-					}
-				}
-				if !currentSuccess {
 					m.Lock()
-					success = false
+					outputError[pt] = err
 					m.Unlock()
+					return
 				}
-			}(i, wg, mtx, data)
+				for _, frameworkName := range resourceRcp.FrameworkNames {
+					validator := nameToValidator[frameworkName]
+					handleErr := func(success bool, err error) bool {
+						if err != nil {
+							var message string
+							if e, ok := err.(model.Error); ok {
+								message = string(e.JSON())
+							} else {
+								message = err.Error()
+							}
+							errorWriter.Write(&model.Data{
+								Type:    "std",
+								Path:    pt,
+								Content: []byte(message),
+							})
+							return false
+						}
+						if !success {
+							m.Lock()
+							outputError[pt] = errors.New("business error encountered")
+							m.Unlock()
+							return false
+						}
+						return true
+					}
+					if validator != nil {
+						success, err := validator.Validate(data)
+						if ok := handleErr(success, err); !ok {
+							return
+						}
+					}
+					evaluator := nameToEvaluator[frameworkName]
+					if evaluator != nil {
+						success, err := evaluator.Evaluate(data)
+						if ok := handleErr(success, err); !ok {
+							return
+						}
+					}
+				}
+			}(resourcePaths[idx], wg, mtx)
 		}
 		wg.Wait()
-		for i := 0; i < batch && counter+i < len(resourceData); i++ {
-			progress.Increment()
+
+		increment := batch
+		if increment+counter > len(resourcePaths) {
+			increment = len(resourcePaths) - counter
 		}
+		progress.Increase(increment)
 		counter += batch
 	}
 	progress.Wait()
-	return success
+	if len(outputError) > 0 {
+		return outputError
+	}
+	return nil
 }
 
-func (p *Pipeline) writeOutput(result *model.Data, output *model.Output) bool {
-	const defaultErrKey = "writeOutput"
-	formatters, err := p.getOutputFormatters(output)
-	if err != nil {
-		errorWriter.Write(&model.Data{
-			Type:    errorWriterType,
-			Content: err.JSON(),
-			Path:    defaultErrKey,
-		})
-		return false
+func (p *Pipeline) getNameToValidator(nameToFramework map[string]*model.Framework) (map[string]*Validator, error) {
+	outputValidator := make(map[string]*Validator)
+	outputError := make(model.Error)
+	for name, framework := range nameToFramework {
+		validator, err := NewValidator(framework)
+		if err != nil {
+			outputError[name] = err
+		} else {
+			outputValidator[name] = validator
+		}
 	}
-	writers, err := p.getOutputWriters(output)
-	if err != nil {
-		errorWriter.Write(&model.Data{
-			Type:    errorWriterType,
-			Content: err.JSON(),
-			Path:    defaultErrKey,
-		})
-		return false
+	if len(outputError) > 0 {
+		return nil, outputError
 	}
+	return outputValidator, nil
+}
+
+func (p *Pipeline) getNameToEvaluator(nameToFramework map[string]*model.Framework) (map[string]*Evaluator, error) {
 	wg := &sync.WaitGroup{}
 	mtx := &sync.Mutex{}
 
-	success := true
-	for i := 0; i < len(output.Targets); i++ {
+	outputEvaluator := make(map[string]*Evaluator)
+	outputError := make(model.Error)
+	for name, framework := range nameToFramework {
 		wg.Add(1)
-		go func(idx int, w *sync.WaitGroup, m *sync.Mutex) {
+
+		go func(n string, f *model.Framework, w *sync.WaitGroup, m *sync.Mutex) {
 			defer w.Done()
-			newContent, err := formatters[idx](result.Content)
+			evaluator, err := NewEvaluator(f, p.evaluate)
 			if err != nil {
-				errorWriter.Write(&model.Data{
-					Type:    result.Type,
-					Path:    result.Path,
-					Content: err.JSON(),
-				})
 				m.Lock()
-				success = false
+				outputError[n] = err
+				m.Unlock()
+			} else {
+				m.Lock()
+				outputEvaluator[n] = evaluator
 				m.Unlock()
 			}
-			if !success {
-				return
-			}
-			newResult := &model.Data{
-				Type:    result.Type,
-				Path:    path.Join(output.Targets[idx].Path, result.Path),
-				Content: newContent,
-			}
-			if err := writers[idx].Write(newResult); err != nil {
-				m.Lock()
-				success = false
-				m.Unlock()
-				errorWriter.Write(&model.Data{
-					Type:    errorWriterType,
-					Path:    fmt.Sprintf("%s [%d]", defaultErrKey, idx),
-					Content: err.JSON(),
-				})
-			}
-		}(i, wg, mtx)
+		}(name, framework, wg, mtx)
+	}
+	if len(outputError) > 0 {
+		return nil, outputError
 	}
 	wg.Wait()
-	return success
+	return outputEvaluator, nil
 }
 
-func (p *Pipeline) getOutputWriters(output *model.Output) ([]model.Writer, model.Error) {
-	const defaultErrKey = "getOutputWriters"
-	outputWriter := make([]model.Writer, len(output.Targets))
+func (p *Pipeline) getNameToFramework(rcp *recipe.Resource) (map[string]*model.Framework, error) {
+	wg := &sync.WaitGroup{}
+	mtx := &sync.Mutex{}
+
+	nameToFramework := make(map[string]*model.Framework)
 	outputError := make(model.Error)
-	for i, t := range output.Targets {
-		fn, err := io.Writers.Get(t.Type)
-		if err != nil {
-			key := fmt.Sprintf("%s [%d]", defaultErrKey, i)
-			outputError[key] = err
-			continue
-		}
-		outputWriter[i] = fn(output.TreatAs)
+	for _, frameworkName := range rcp.FrameworkNames {
+		wg.Add(1)
+
+		go func(frameworkRcp *recipe.Framework, w *sync.WaitGroup, m *sync.Mutex) {
+			defer w.Done()
+			framework, err := p.loader.LoadFramework(frameworkRcp)
+			if err != nil {
+				m.Lock()
+				outputError[frameworkRcp.Name] = err
+				m.Unlock()
+			} else {
+				m.Lock()
+				nameToFramework[frameworkRcp.Name] = framework
+				m.Unlock()
+			}
+		}(p.nameToFrameworkRecipe[frameworkName], wg, mtx)
 	}
+	wg.Wait()
+
 	if len(outputError) > 0 {
 		return nil, outputError
 	}
-	return outputWriter, nil
+	return nameToFramework, nil
 }
 
-func (p *Pipeline) getOutputFormatters(output *model.Output) ([]model.Format, model.Error) {
-	const defaultErrKey = "getOutputFormatters"
-	outputFormat := make([]model.Format, len(output.Targets))
+func (p *Pipeline) validateFrameworkNames(resourceRcp *recipe.Resource) error {
 	outputError := make(model.Error)
-	for i, t := range output.Targets {
-		fn, err := formatter.Formats.Get(jsonFormat, t.Format)
-		if err != nil {
-			key := fmt.Sprintf("%s [%d]", defaultErrKey, i)
-			outputError[key] = err
-			continue
+	for _, frameworkName := range resourceRcp.FrameworkNames {
+		if p.nameToFrameworkRecipe[frameworkName] == nil {
+			outputError[frameworkName] = fmt.Errorf("not found for resource [%s]", resourceRcp.Name)
 		}
-		outputFormat[i] = fn
 	}
 	if len(outputError) > 0 {
-		return nil, outputError
+		return outputError
 	}
-	return outputFormat, nil
+	return nil
 }

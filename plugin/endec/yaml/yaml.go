@@ -13,8 +13,7 @@ const format = "yaml"
 
 // NewEncode initializes YAML encoder function
 func NewEncode() model.Encode {
-	const defaultErrKey = "NewEncode"
-	return func(i interface{}) ([]byte, model.Error) {
+	return func(i interface{}) ([]byte, error) {
 		var recoverErr error
 		output, err := func() ([]byte, error) {
 			defer func() {
@@ -25,10 +24,10 @@ func NewEncode() model.Encode {
 			return yaml.Marshal(i)
 		}()
 		if err != nil {
-			return nil, model.BuildError(defaultErrKey, err)
+			return nil, err
 		}
 		if recoverErr != nil {
-			return nil, model.BuildError(defaultErrKey, recoverErr)
+			return nil, recoverErr
 		}
 		return output, nil
 	}
@@ -36,10 +35,9 @@ func NewEncode() model.Encode {
 
 // NewDecode initializes YAML decoder function
 func NewDecode() model.Decode {
-	const defaultErrKey = "NewDecode"
-	return func(b []byte, i interface{}) model.Error {
+	return func(b []byte, i interface{}) error {
 		if err := yaml.Unmarshal(b, i); err != nil {
-			return model.BuildError(defaultErrKey, err)
+			return err
 		}
 		return nil
 	}

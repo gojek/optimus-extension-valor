@@ -27,7 +27,7 @@ func (d *DecodeFactorySuite) TestRegister() {
 	d.Run("should return error fn is already registered", func() {
 		factory := endec.NewDecodeFactory()
 		format := "yaml"
-		var fn model.Decode = func(b []byte, i interface{}) model.Error {
+		var fn model.Decode = func(b []byte, i interface{}) error {
 			return nil
 		}
 		factory.Register(format, fn)
@@ -40,7 +40,7 @@ func (d *DecodeFactorySuite) TestRegister() {
 	d.Run("should return nil if no error is found", func() {
 		factory := endec.NewDecodeFactory()
 		format := "yaml"
-		var fn model.Decode = func(b []byte, i interface{}) model.Error {
+		var fn model.Decode = func(b []byte, i interface{}) error {
 			return nil
 		}
 
@@ -55,7 +55,7 @@ func (d *DecodeFactorySuite) TestGet() {
 		factory := endec.NewDecodeFactory()
 		yamlFormat := "yaml"
 		jsonFormat := "json"
-		var fn model.Decode = func(b []byte, i interface{}) model.Error {
+		var fn model.Decode = func(b []byte, i interface{}) error {
 			return nil
 		}
 		factory.Register(yamlFormat, fn)
@@ -69,7 +69,7 @@ func (d *DecodeFactorySuite) TestGet() {
 	d.Run("should return fn and nil type is found found", func() {
 		factory := endec.NewDecodeFactory()
 		yamlFormat := "yaml"
-		var fn model.Decode = func(b []byte, i interface{}) model.Error {
+		var fn model.Decode = func(b []byte, i interface{}) error {
 			return nil
 		}
 		factory.Register(yamlFormat, fn)

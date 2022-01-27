@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 
-	"github.com/gojek/optimus-extension-valor/model"
 	"github.com/gojek/optimus-extension-valor/registry/formatter"
 
 	"gopkg.in/yaml.v3"
@@ -16,7 +15,7 @@ const (
 )
 
 // ToJSON formats input from JSON to JSON, which does nothing
-func ToJSON(input []byte) ([]byte, model.Error) {
+func ToJSON(input []byte) ([]byte, error) {
 	output := make([]byte, len(input))
 	for i := 0; i < len(input); i++ {
 		output[i] = input[i]
@@ -25,18 +24,17 @@ func ToJSON(input []byte) ([]byte, model.Error) {
 }
 
 // ToYAML formats input from JSON to YAML
-func ToYAML(input []byte) ([]byte, model.Error) {
-	const defaultErrKey = "ToYAML"
+func ToYAML(input []byte) ([]byte, error) {
 	var t interface{}
 	err := json.Unmarshal(input, &t)
 	if err != nil {
-		return nil, model.BuildError(defaultErrKey, err)
+		return nil, err
 	}
 	var b bytes.Buffer
 	y := yaml.NewEncoder(&b)
 	y.SetIndent(2)
 	if err := y.Encode(t); err != nil {
-		return nil, model.BuildError(defaultErrKey, err)
+		return nil, err
 	}
 	return b.Bytes(), nil
 }

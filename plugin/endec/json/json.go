@@ -11,11 +11,10 @@ const format = "json"
 
 // NewEncode initializes JSON encoding function
 func NewEncode() model.Encode {
-	const defaultErrKey = "NewEncode"
-	return func(i interface{}) ([]byte, model.Error) {
+	return func(i interface{}) ([]byte, error) {
 		output, err := json.Marshal(i)
 		if err != nil {
-			return nil, model.BuildError(defaultErrKey, err)
+			return nil, err
 		}
 		return output, nil
 	}
@@ -23,10 +22,9 @@ func NewEncode() model.Encode {
 
 // NewDecode initializes JSON decodign function
 func NewDecode() model.Decode {
-	const defaultErrKey = "NewDecode"
-	return func(b []byte, i interface{}) model.Error {
+	return func(b []byte, i interface{}) error {
 		if err := json.Unmarshal(b, i); err != nil {
-			return model.BuildError(defaultErrKey, err)
+			return err
 		}
 		return nil
 	}

@@ -20,7 +20,7 @@ func (v *ValidatorSuite) TestValidate() {
 		var resourceData *model.Data = nil
 		validator, _ := core.NewValidator(framework)
 
-		actualErr := validator.Validate(resourceData)
+		_, actualErr := validator.Validate(resourceData)
 
 		v.NotNil(actualErr)
 	})
@@ -37,7 +37,7 @@ func (v *ValidatorSuite) TestValidate() {
 		resourceData := &model.Data{}
 		validator, _ := core.NewValidator(framework)
 
-		actualErr := validator.Validate(resourceData)
+		_, actualErr := validator.Validate(resourceData)
 
 		v.NotNil(actualErr)
 	})
@@ -89,7 +89,7 @@ func (v *ValidatorSuite) TestValidate() {
 		}
 		validator, _ := core.NewValidator(framework)
 
-		actualErr := validator.Validate(resourceData)
+		_, actualErr := validator.Validate(resourceData)
 
 		v.NotNil(actualErr)
 	})
@@ -141,7 +141,7 @@ func (v *ValidatorSuite) TestValidate() {
 		}
 		validator, _ := core.NewValidator(framework)
 
-		actualErr := validator.Validate(resourceData)
+		_, actualErr := validator.Validate(resourceData)
 
 		v.Nil(actualErr)
 	})

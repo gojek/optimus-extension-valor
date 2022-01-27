@@ -14,25 +14,23 @@ type DecodeFactory struct {
 }
 
 // Register registers a factory function for a type
-func (d *DecodeFactory) Register(format string, fn model.Decode) model.Error {
-	const defaultErrKey = "Register"
+func (d *DecodeFactory) Register(format string, fn model.Decode) error {
 	if fn == nil {
-		return model.BuildError(defaultErrKey, errors.New("Decode is nil"))
+		return errors.New("Decode is nil")
 	}
 	format = strings.ToLower(format)
 	if d.typeToFn[format] != nil {
-		return model.BuildError(defaultErrKey, fmt.Errorf("[%s] is already registered", format))
+		return fmt.Errorf("[%s] is already registered", format)
 	}
 	d.typeToFn[format] = fn
 	return nil
 }
 
 // Get gets a factory function based on a type
-func (d *DecodeFactory) Get(format string) (model.Decode, model.Error) {
-	const defaultErrKey = "Get"
+func (d *DecodeFactory) Get(format string) (model.Decode, error) {
 	format = strings.ToLower(format)
 	if d.typeToFn[format] == nil {
-		return nil, model.BuildError(defaultErrKey, fmt.Errorf("[%s] is not registered", format))
+		return nil, fmt.Errorf("[%s] is not registered", format)
 	}
 	return d.typeToFn[format], nil
 }

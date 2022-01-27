@@ -18,10 +18,9 @@ type Resource struct {
 // Framework is a recipe on how and where to read the actual Framework data
 type Framework struct {
 	Name        string        `yaml:"name" validate:"required"`
-	Definitions []*Definition `yaml:"definitions"`
 	Schemas     []*Schema     `yaml:"schemas"`
+	Definitions []*Definition `yaml:"definitions"`
 	Procedures  []*Procedure  `yaml:"procedures"`
-	Output      *Output       `yaml:"output"`
 }
 
 // Definition is a recipe on how and where to read the actual Definition data
@@ -41,16 +40,18 @@ type Function struct {
 
 // Schema is a recipe on how and where to read the actual Schema data
 type Schema struct {
-	Name string `yaml:"name" validate:"required"`
-	Type string `yaml:"type" validate:"required,oneof=dir file"`
-	Path string `yaml:"path" validate:"required"`
+	Name   string  `yaml:"name" validate:"required"`
+	Type   string  `yaml:"type" validate:"required,oneof=dir file"`
+	Path   string  `yaml:"path" validate:"required"`
+	Output *Output `yaml:"output"`
 }
 
 // Procedure is a recipe on how and where to read the actual Procedure data
 type Procedure struct {
-	Name string `yaml:"name" validate:"required"`
-	Type string `yaml:"type" validate:"required,oneof=dir file"`
-	Path string `yaml:"path" validate:"required"`
+	Name   string  `yaml:"name" validate:"required"`
+	Type   string  `yaml:"type" validate:"required,oneof=dir file"`
+	Path   string  `yaml:"path" validate:"required"`
+	Output *Output `yaml:"output"`
 }
 
 // Output defines how the last procedure output is written

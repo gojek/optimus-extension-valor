@@ -47,7 +47,6 @@ type Framework struct {
 	Definitions []*Definition
 	Schemas     []*Schema
 	Procedures  []*Procedure
-	Output      *Output
 }
 
 // Definition is the definition that could be used in a Procedure
@@ -59,14 +58,16 @@ type Definition struct {
 
 // Schema contains information on Schema information defined by the user
 type Schema struct {
-	Name string
-	Data *Data
+	Name   string
+	Data   *Data
+	Output *Output
 }
 
 // Procedure contains information on Procedure information defined by the user
 type Procedure struct {
-	Name string
-	Data *Data
+	Name   string
+	Data   *Data
+	Output *Output
 }
 
 // Output describes how the last procedure output is written

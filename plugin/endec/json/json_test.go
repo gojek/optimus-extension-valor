@@ -9,8 +9,6 @@ import (
 )
 
 func TestNewEncode(t *testing.T) {
-	const defaultErrKey = "NewEncode"
-
 	t.Run("should return nil and error if error when executing", func(t *testing.T) {
 		message := func() {}
 		encode := json.NewEncode()
@@ -33,8 +31,6 @@ func TestNewEncode(t *testing.T) {
 }
 
 func TestNewDecode(t *testing.T) {
-	const defaultErrKey = "NewDecode"
-
 	t.Run("should return error if error when executing", func(t *testing.T) {
 		input := []byte("message")
 		var output int

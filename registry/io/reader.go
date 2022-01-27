@@ -11,7 +11,6 @@ import (
 // ReaderFn is a getter for IO Reader instance
 type ReaderFn func(
 	getPath model.GetPath,
-	filterPath model.FilterPath,
 	postProcess model.PostProcess,
 ) model.Reader
 
@@ -21,25 +20,23 @@ type ReaderFactory struct {
 }
 
 // Register registers a factory function for a type
-func (r *ReaderFactory) Register(_type string, fn ReaderFn) model.Error {
-	const defaultErrKey = "Register"
+func (r *ReaderFactory) Register(_type string, fn ReaderFn) error {
 	if fn == nil {
-		return model.BuildError(defaultErrKey, errors.New("ReaderFn is nil"))
+		return errors.New("ReaderFn is nil")
 	}
 	_type = strings.ToLower(_type)
 	if r.typeToFn[_type] != nil {
-		return model.BuildError(defaultErrKey, fmt.Errorf("[%s] is already registered", _type))
+		return fmt.Errorf("[%s] is already registered", _type)
 	}
 	r.typeToFn[_type] = fn
 	return nil
 }
 
 // Get gets a factory function based on a type
-func (r *ReaderFactory) Get(_type string) (ReaderFn, model.Error) {
-	const defaultErrKey = "Get"
+func (r *ReaderFactory) Get(_type string) (ReaderFn, error) {
 	_type = strings.ToLower(_type)
 	if r.typeToFn[_type] == nil {
-		return nil, model.BuildError(defaultErrKey, fmt.Errorf("[%s] is not registered", _type))
+		return nil, fmt.Errorf("[%s] is not registered", _type)
 	}
 	return r.typeToFn[_type], nil
 }

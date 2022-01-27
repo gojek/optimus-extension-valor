@@ -13,22 +13,14 @@ type Writer struct {
 }
 
 // Write provides a mock function with given fields: _a0
-func (_m *Writer) Write(_a0 ...*model.Data) model.Error {
-	_va := make([]interface{}, len(_a0))
-	for _i := range _a0 {
-		_va[_i] = _a0[_i]
-	}
-	var _ca []interface{}
-	_ca = append(_ca, _va...)
-	ret := _m.Called(_ca...)
+func (_m *Writer) Write(_a0 *model.Data) error {
+	ret := _m.Called(_a0)
 
-	var r0 model.Error
-	if rf, ok := ret.Get(0).(func(...*model.Data) model.Error); ok {
-		r0 = rf(_a0...)
+	var r0 error
+	if rf, ok := ret.Get(0).(func(*model.Data) error); ok {
+		r0 = rf(_a0)
 	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(model.Error)
-		}
+		r0 = ret.Error(0)
 	}
 
 	return r0

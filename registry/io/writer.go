@@ -17,25 +17,23 @@ type WriterFactory struct {
 }
 
 // Register registers a factory function for a type
-func (w *WriterFactory) Register(_type string, fn WriterFn) model.Error {
-	const defaultErrKey = "Register"
+func (w *WriterFactory) Register(_type string, fn WriterFn) error {
 	if fn == nil {
-		return model.BuildError(defaultErrKey, errors.New("WriteFn is nil"))
+		return errors.New("WriteFn is nil")
 	}
 	_type = strings.ToLower(_type)
 	if w.typeToFn[_type] != nil {
-		return model.BuildError(defaultErrKey, fmt.Errorf("[%s] is already registered", _type))
+		return fmt.Errorf("[%s] is already registered", _type)
 	}
 	w.typeToFn[_type] = fn
 	return nil
 }
 
 // Get gets a factory function based on a type
-func (w *WriterFactory) Get(_type string) (WriterFn, model.Error) {
-	const defaultErrKey = "Get"
+func (w *WriterFactory) Get(_type string) (WriterFn, error) {
 	_type = strings.ToLower(_type)
 	if w.typeToFn[_type] == nil {
-		return nil, model.BuildError(defaultErrKey, fmt.Errorf("[%s] is not registered", _type))
+		return nil, fmt.Errorf("[%s] is not registered", _type)
 	}
 	return w.typeToFn[_type], nil
 }

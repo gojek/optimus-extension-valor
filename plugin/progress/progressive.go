@@ -23,9 +23,9 @@ type Progressive struct {
 	bar      *mpb.Bar
 }
 
-// Increment increments the progress
-func (v *Progressive) Increment() {
-	v.bar.Increment()
+// Increase inceases the progress by the specified num
+func (v *Progressive) Increase(num int) {
+	v.bar.IncrBy(num)
 }
 
 // Wait finishes the progress
@@ -58,11 +58,13 @@ func NewProgressive(name string, total int) *Progressive {
 }
 
 func standardize(input string) string {
+	extender := "..."
 	if len(input) > maxNameLength {
-		input = input[:maxNameLength] + "..."
+		input = input[:maxNameLength] + extender
 	}
-	if len(input) < maxNameLength+3 {
-		input = input + strings.Repeat(" ", maxNameLength+3-len(input))
+	limit := maxNameLength + len(extender)
+	if len(input) < limit {
+		input = input + strings.Repeat(" ", limit-len(input))
 	}
 	return input
 }

@@ -17,7 +17,7 @@ type EvaluatorSuite struct {
 }
 
 func (e *EvaluatorSuite) TestEvaluate() {
-	e.Run("should return null and error if resource data is nil", func() {
+	e.Run("should return false and error if resource data is nil", func() {
 		framework := &model.Framework{}
 		var resourceData *model.Data = nil
 		var evaluate model.Evaluate = func(name, snippet string) (string, error) {
@@ -25,7 +25,7 @@ func (e *EvaluatorSuite) TestEvaluate() {
 		}
 		evaluator, _ := core.NewEvaluator(framework, evaluate)
 
-		expectedValue := model.SkipNullValue
+		expectedValue := false
 
 		actualValue, actualErr := evaluator.Evaluate(resourceData)
 
@@ -33,7 +33,7 @@ func (e *EvaluatorSuite) TestEvaluate() {
 		e.NotNil(actualErr)
 	})
 
-	e.Run("should return null and error if one or more procedures are nil", func() {
+	e.Run("should return false and error if one or more procedures are nil", func() {
 		framework := &model.Framework{
 			Procedures: []*model.Procedure{nil},
 		}
@@ -43,7 +43,7 @@ func (e *EvaluatorSuite) TestEvaluate() {
 		}
 		evaluator, _ := core.NewEvaluator(framework, evaluate)
 
-		expectedValue := model.SkipNullValue
+		expectedValue := false
 
 		actualValue, actualErr := evaluator.Evaluate(resourceData)
 
@@ -65,7 +65,7 @@ func (e *EvaluatorSuite) TestEvaluate() {
 		}
 		evaluator, _ := core.NewEvaluator(framework, evaluate)
 
-		expectedValue := model.SkipNullValue
+		expectedValue := false
 
 		actualValue, actualErr := evaluator.Evaluate(resourceData)
 
@@ -90,7 +90,7 @@ func (e *EvaluatorSuite) TestEvaluate() {
 		}
 		evaluator, _ := core.NewEvaluator(framework, evaluate)
 
-		expectedValue := model.SkipNullValue
+		expectedValue := false
 
 		actualValue, actualErr := evaluator.Evaluate(resourceData)
 
@@ -98,7 +98,7 @@ func (e *EvaluatorSuite) TestEvaluate() {
 		e.NotNil(actualErr)
 	})
 
-	e.Run("should return result and nil if no error is encountered", func() {
+	e.Run("should return true and nil if no error is encountered", func() {
 		framework := &model.Framework{
 			Procedures: []*model.Procedure{
 				{
@@ -115,7 +115,7 @@ func (e *EvaluatorSuite) TestEvaluate() {
 		}
 		evaluator, _ := core.NewEvaluator(framework, evaluate)
 
-		expectedValue := "{\"message\": \"error\"}"
+		expectedValue := true
 
 		actualValue, actualErr := evaluator.Evaluate(resourceData)
 

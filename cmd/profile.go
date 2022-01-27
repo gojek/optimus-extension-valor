@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"errors"
 	"fmt"
 	"os"
 
@@ -18,7 +17,7 @@ func getProfileCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			rcp, err := loadRecipe(recipePath, defaultRecipeType, defaultRecipeFormat)
 			if err != nil {
-				return errors.New(string(err.JSON()))
+				return err
 			}
 
 			fmt.Println("RESOURCE:")
@@ -66,9 +65,11 @@ func getFrameworkTable(rcp *recipe.Recipe) *tablewriter.Table {
 		for _, p := range f.Procedures {
 			table.Append([]string{f.Name, "procedure", p.Name})
 		}
-		if f.Output != nil {
-			for _, o := range f.Output.Targets {
-				table.Append([]string{f.Name, "target", o.Name})
+		for _, p := range f.Procedures {
+			if p.Output != nil {
+				for _, t := range p.Output.Targets {
+					table.Append([]string{f.Name, "output", t.Path})
+				}
 			}
 		}
 	}
