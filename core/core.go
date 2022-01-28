@@ -118,7 +118,7 @@ func (p *Pipeline) executeResource(resourceRcp *recipe.Resource, nameToValidator
 	if err != nil {
 		return err
 	}
-	outputError := make(model.Error)
+	outputError := &model.Error{}
 
 	progress := p.newProgress(resourceRcp.Name, len(resourcePaths))
 	batch := p.batchSize
@@ -138,17 +138,14 @@ func (p *Pipeline) executeResource(resourceRcp *recipe.Resource, nameToValidator
 				defer w.Done()
 				data, err := p.loader.LoadData(pt, resourceRcp.Type, resourceRcp.Format)
 				if err != nil {
-					m.Lock()
-					outputError[pt] = err
-					m.Unlock()
+					outputError.Add(pt, err)
 					return
 				}
 				for _, frameworkName := range resourceRcp.FrameworkNames {
-					validator := nameToValidator[frameworkName]
-					handleErr := func(success bool, err error) bool {
+					handleErr := func(process, name string, success bool, err error) bool {
 						if err != nil {
 							var message string
-							if e, ok := err.(model.Error); ok {
+							if e, ok := err.(*model.Error); ok {
 								message = string(e.JSON())
 							} else {
 								message = err.Error()
@@ -158,26 +155,34 @@ func (p *Pipeline) executeResource(resourceRcp *recipe.Resource, nameToValidator
 								Path:    pt,
 								Content: []byte(message),
 							})
+							outputError.Add(pt,
+								fmt.Errorf("%s on framework [%s] encountered execution error",
+									process, name,
+								),
+							)
 							return false
 						}
 						if !success {
-							m.Lock()
-							outputError[pt] = errors.New("business error encountered")
-							m.Unlock()
+							outputError.Add(pt,
+								fmt.Errorf("%s on framework [%s] encountered business error",
+									process, name,
+								),
+							)
 							return false
 						}
 						return true
 					}
+					validator := nameToValidator[frameworkName]
 					if validator != nil {
 						success, err := validator.Validate(data)
-						if ok := handleErr(success, err); !ok {
+						if ok := handleErr("validation", frameworkName, success, err); !ok {
 							return
 						}
 					}
 					evaluator := nameToEvaluator[frameworkName]
 					if evaluator != nil {
 						success, err := evaluator.Evaluate(data)
-						if ok := handleErr(success, err); !ok {
+						if ok := handleErr("evaluation", frameworkName, success, err); !ok {
 							return
 						}
 					}
@@ -194,7 +199,7 @@ func (p *Pipeline) executeResource(resourceRcp *recipe.Resource, nameToValidator
 		counter += batch
 	}
 	progress.Wait()
-	if len(outputError) > 0 {
+	if outputError.Length() > 0 {
 		return outputError
 	}
 	return nil
@@ -202,16 +207,16 @@ func (p *Pipeline) executeResource(resourceRcp *recipe.Resource, nameToValidator
 
 func (p *Pipeline) getFrameworkNameToValidator(nameToFramework map[string]*model.Framework) (map[string]*Validator, error) {
 	outputValidator := make(map[string]*Validator)
-	outputError := make(model.Error)
+	outputError := &model.Error{}
 	for name, framework := range nameToFramework {
 		validator, err := NewValidator(framework)
 		if err != nil {
-			outputError[name] = err
+			outputError.Add(name, err)
 		} else {
 			outputValidator[name] = validator
 		}
 	}
-	if len(outputError) > 0 {
+	if outputError.Length() > 0 {
 		return nil, outputError
 	}
 	return outputValidator, nil
@@ -222,7 +227,7 @@ func (p *Pipeline) getFrameworkNameToEvaluator(nameToFramework map[string]*model
 	mtx := &sync.Mutex{}
 
 	outputEvaluator := make(map[string]*Evaluator)
-	outputError := make(model.Error)
+	outputError := &model.Error{}
 	for name, framework := range nameToFramework {
 		wg.Add(1)
 
@@ -230,9 +235,7 @@ func (p *Pipeline) getFrameworkNameToEvaluator(nameToFramework map[string]*model
 			defer w.Done()
 			evaluator, err := NewEvaluator(f, p.evaluate)
 			if err != nil {
-				m.Lock()
-				outputError[n] = err
-				m.Unlock()
+				outputError.Add(n, err)
 			} else {
 				m.Lock()
 				outputEvaluator[n] = evaluator
@@ -240,7 +243,7 @@ func (p *Pipeline) getFrameworkNameToEvaluator(nameToFramework map[string]*model
 			}
 		}(name, framework, wg, mtx)
 	}
-	if len(outputError) > 0 {
+	if outputError.Length() > 0 {
 		return nil, outputError
 	}
 	wg.Wait()
@@ -252,7 +255,7 @@ func (p *Pipeline) getFrameworkNameToFramework(rcp *recipe.Resource) (map[string
 	mtx := &sync.Mutex{}
 
 	nameToFramework := make(map[string]*model.Framework)
-	outputError := make(model.Error)
+	outputError := &model.Error{}
 	for _, frameworkName := range rcp.FrameworkNames {
 		wg.Add(1)
 
@@ -260,9 +263,7 @@ func (p *Pipeline) getFrameworkNameToFramework(rcp *recipe.Resource) (map[string
 			defer w.Done()
 			framework, err := p.loader.LoadFramework(frameworkRcp)
 			if err != nil {
-				m.Lock()
-				outputError[frameworkRcp.Name] = err
-				m.Unlock()
+				outputError.Add(frameworkRcp.Name, err)
 			} else {
 				m.Lock()
 				nameToFramework[frameworkRcp.Name] = framework
@@ -272,20 +273,20 @@ func (p *Pipeline) getFrameworkNameToFramework(rcp *recipe.Resource) (map[string
 	}
 	wg.Wait()
 
-	if len(outputError) > 0 {
+	if outputError.Length() > 0 {
 		return nil, outputError
 	}
 	return nameToFramework, nil
 }
 
 func (p *Pipeline) validateFrameworkNames(resourceRcp *recipe.Resource) error {
-	outputError := make(model.Error)
+	outputError := &model.Error{}
 	for _, frameworkName := range resourceRcp.FrameworkNames {
 		if p.nameToFrameworkRecipe[frameworkName] == nil {
-			outputError[frameworkName] = fmt.Errorf("not found for resource [%s]", resourceRcp.Name)
+			outputError.Add(frameworkName, fmt.Errorf("not found for resource [%s]", resourceRcp.Name))
 		}
 	}
-	if len(outputError) > 0 {
+	if outputError.Length() > 0 {
 		return outputError
 	}
 	return nil

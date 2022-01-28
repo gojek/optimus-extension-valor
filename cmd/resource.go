@@ -37,7 +37,7 @@ func getResourceCmd() *cobra.Command {
 				})
 			}
 			err := executePipeline(recipePath, batchSize, progressType, enrich)
-			if e, ok := err.(model.Error); ok {
+			if e, ok := err.(*model.Error); ok {
 				return errors.New(string(e.JSON()))
 			}
 			return err

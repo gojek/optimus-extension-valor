@@ -42,7 +42,10 @@ func (e *Evaluator) Evaluate(resourceData *model.Data) (bool, error) {
 	}
 	resourceSnippet := string(resourceData.Content)
 	previousOutputSnippet := model.SkipNullValue
-	for _, procedure := range e.framework.Procedures {
+	for i, procedure := range e.framework.Procedures {
+		if procedure == nil {
+			return false, fmt.Errorf("procedure [%d] is nil", i)
+		}
 		snippet, err := buildSnippet(resourceSnippet, e.definitionSnippet, previousOutputSnippet, procedure)
 		if err != nil {
 			return false, err
@@ -79,7 +82,7 @@ func buildAllDefinitions(evaluate model.Evaluate, definitions []*model.Definitio
 	mtx := &sync.Mutex{}
 
 	nameToSnippet := make(map[string]string)
-	outputError := make(model.Error)
+	outputError := &model.Error{}
 	for i, def := range definitions {
 		wg.Add(1)
 
@@ -91,9 +94,7 @@ func buildAllDefinitions(evaluate model.Evaluate, definitions []*model.Definitio
 				if d != nil {
 					key = d.Name
 				}
-				m.Lock()
-				outputError[key] = err
-				m.Unlock()
+				outputError.Add(key, err)
 			} else {
 				m.Lock()
 				nameToSnippet[d.Name] = defSnippet
@@ -103,7 +104,7 @@ func buildAllDefinitions(evaluate model.Evaluate, definitions []*model.Definitio
 	}
 	wg.Wait()
 
-	if len(outputError) > 0 {
+	if outputError.Length() > 0 {
 		return model.SkipNullValue, outputError
 	}
 	var outputSnippets []string
@@ -198,13 +199,9 @@ func buildSnippet(
 	definitionSnippet string,
 	previousOutputSnippet string,
 	procedure *model.Procedure,
-) (string, model.Error) {
-	const defaultErrKey = "buildSnippet"
-	if procedure == nil {
-		return model.SkipNullValue, model.BuildError(defaultErrKey, errors.New("procedure is nil"))
-	}
+) (string, error) {
 	if procedure.Data == nil {
-		return model.SkipNullValue, model.BuildError(defaultErrKey, errors.New("procedure data is nil"))
+		return model.SkipNullValue, fmt.Errorf("procedure data for [%s] is nil", procedure.Name)
 	}
 	output := fmt.Sprintf(`
 /*

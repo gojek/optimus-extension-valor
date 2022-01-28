@@ -40,12 +40,12 @@ func (l *Loader) LoadFramework(rcp *recipe.Framework) (*model.Framework, error) 
 	}, nil
 }
 
-func (l *Loader) loadAllProcedures(rcps []*recipe.Procedure) ([]*model.Procedure, model.Error) {
+func (l *Loader) loadAllProcedures(rcps []*recipe.Procedure) ([]*model.Procedure, error) {
 	wg := &sync.WaitGroup{}
 	mtx := &sync.Mutex{}
 
 	outputData := make([]*model.Procedure, len(rcps))
-	outputError := make(model.Error)
+	outputError := &model.Error{}
 	for i, rcp := range rcps {
 		wg.Add(1)
 		go func(idx int, w *sync.WaitGroup, m *sync.Mutex, r *recipe.Procedure) {
@@ -57,9 +57,7 @@ func (l *Loader) loadAllProcedures(rcps []*recipe.Procedure) ([]*model.Procedure
 				if r != nil {
 					key = r.Name
 				}
-				m.Lock()
-				outputError[key] = err
-				m.Unlock()
+				outputError.Add(key, err)
 			} else {
 				m.Lock()
 				outputData[idx] = procedure
@@ -69,7 +67,7 @@ func (l *Loader) loadAllProcedures(rcps []*recipe.Procedure) ([]*model.Procedure
 	}
 	wg.Wait()
 
-	if len(outputError) > 0 {
+	if outputError.Length() > 0 {
 		return nil, outputError
 	}
 	return outputData, nil
@@ -98,12 +96,12 @@ func (l *Loader) LoadProcedure(rcp *recipe.Procedure) (*model.Procedure, error) 
 	}, nil
 }
 
-func (l *Loader) loadAllSchemas(rcps []*recipe.Schema) ([]*model.Schema, model.Error) {
+func (l *Loader) loadAllSchemas(rcps []*recipe.Schema) ([]*model.Schema, error) {
 	wg := &sync.WaitGroup{}
 	mtx := &sync.Mutex{}
 
 	outputData := make([]*model.Schema, len(rcps))
-	outputError := make(model.Error)
+	outputError := &model.Error{}
 	for i, rcp := range rcps {
 		wg.Add(1)
 
@@ -115,9 +113,7 @@ func (l *Loader) loadAllSchemas(rcps []*recipe.Schema) ([]*model.Schema, model.E
 				if r != nil {
 					key = r.Name
 				}
-				m.Lock()
-				outputError[key] = err
-				m.Unlock()
+				outputError.Add(key, err)
 			} else {
 				m.Lock()
 				outputData[idx] = schema
@@ -127,7 +123,7 @@ func (l *Loader) loadAllSchemas(rcps []*recipe.Schema) ([]*model.Schema, model.E
 	}
 	wg.Wait()
 
-	if len(outputError) > 0 {
+	if outputError.Length() > 0 {
 		return nil, outputError
 	}
 	return outputData, nil
@@ -177,7 +173,7 @@ func (l *Loader) loadAllDefinitions(rcps []*recipe.Definition) ([]*model.Definit
 	mtx := &sync.Mutex{}
 
 	outputData := make([]*model.Definition, len(rcps))
-	outputError := make(model.Error)
+	outputError := &model.Error{}
 	for i, rcp := range rcps {
 		wg.Add(1)
 
@@ -189,9 +185,7 @@ func (l *Loader) loadAllDefinitions(rcps []*recipe.Definition) ([]*model.Definit
 				if r != nil {
 					key = r.Name
 				}
-				m.Lock()
-				outputError[key] = err
-				m.Unlock()
+				outputError.Add(key, err)
 			} else {
 				m.Lock()
 				outputData[idx] = definition
@@ -201,7 +195,7 @@ func (l *Loader) loadAllDefinitions(rcps []*recipe.Definition) ([]*model.Definit
 	}
 	wg.Wait()
 
-	if len(outputError) > 0 {
+	if outputError.Length() > 0 {
 		return nil, outputError
 	}
 	return outputData, nil

@@ -19,14 +19,14 @@ func NewValidator(framework *model.Framework) (*Validator, error) {
 	if framework == nil {
 		return nil, errors.New("framework is nil")
 	}
-	outputError := make(model.Error)
+	outputError := &model.Error{}
 	for i, sch := range framework.Schemas {
 		if sch == nil {
 			key := fmt.Sprintf("%d", i)
-			outputError[key] = errors.New("schema is nil")
+			outputError.Add(key, errors.New("schema is nil"))
 		}
 	}
-	if len(outputError) > 0 {
+	if outputError.Length() > 0 {
 		return nil, outputError
 	}
 	return &Validator{
@@ -41,7 +41,7 @@ func (v *Validator) Validate(resourceData *model.Data) (bool, error) {
 	}
 	for _, schema := range v.framework.Schemas {
 		if schema.Data == nil {
-			return false, fmt.Errorf("schema data is nil")
+			return false, fmt.Errorf("schema data for [%s] is nil", schema.Name)
 		}
 		schemaLoader := gojsonschema.NewStringLoader(string(schema.Data.Content))
 		recordLoader := gojsonschema.NewStringLoader(string(resourceData.Content))
@@ -52,13 +52,13 @@ func (v *Validator) Validate(resourceData *model.Data) (bool, error) {
 		if result.Valid() {
 			continue
 		}
-		businessOutput := make(model.Error)
+		businessOutput := &model.Error{}
 		for _, r := range result.Errors() {
 			field := r.Field()
 			msg := r.Description()
-			businessOutput[field] = msg
+			businessOutput.Add(field, msg)
 		}
-		if len(businessOutput) > 0 {
+		if businessOutput.Length() > 0 {
 			success, err := treatOutput(
 				&model.Data{
 					Type:    resourceData.Type,

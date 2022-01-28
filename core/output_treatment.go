@@ -12,21 +12,21 @@ func treatOutput(data *model.Data, output *model.Output) (bool, error) {
 	if output == nil {
 		return true, nil
 	}
-	outputError := make(model.Error)
+	outputError := &model.Error{}
 	for _, t := range output.Targets {
 		formatterFn, err := formatter.Formats.Get(jsonFormat, t.Format)
 		if err != nil {
-			outputError[t.Name] = err
+			outputError.Add(t.Name, err)
 			continue
 		}
 		writerFn, err := io.Writers.Get(t.Type)
 		if err != nil {
-			outputError[t.Name] = err
+			outputError.Add(t.Name, err)
 			continue
 		}
 		result, err := formatterFn(data.Content)
 		if err != nil {
-			outputError[t.Name] = err
+			outputError.Add(t.Name, err)
 			continue
 		}
 		writer := writerFn(output.TreatAs)
@@ -37,11 +37,11 @@ func treatOutput(data *model.Data, output *model.Output) (bool, error) {
 				Content: result,
 			},
 		); err != nil {
-			outputError[t.Name] = err
+			outputError.Add(t.Name, err)
 			continue
 		}
 	}
-	if len(outputError) > 0 {
+	if outputError.Length() > 0 {
 		return false, outputError
 	}
 	if len(output.Targets) > 0 && output.TreatAs == model.TreatmentError {

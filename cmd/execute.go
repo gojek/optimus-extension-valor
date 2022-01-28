@@ -64,7 +64,7 @@ func executePipeline(recipePath string, batchSize int, progressType string, enri
 		return err
 	}
 	err = pipeline.Execute()
-	if e, ok := err.(model.Error); ok {
+	if e, ok := err.(*model.Error); ok {
 		return errors.New(string(e.JSON()))
 	}
 	return err
