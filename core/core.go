@@ -3,6 +3,7 @@ package core
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/gojek/optimus-extension-valor/model"
@@ -80,24 +81,31 @@ func NewPipeline(
 // Execute executes pipeline process
 func (p *Pipeline) Execute() error {
 	for _, resourceRcp := range p.recipe.Resources {
+		fmt.Printf("Resource [%s]\n", strings.ToUpper(resourceRcp.Name))
+		fmt.Println("o> validating framework names")
 		if err := p.validateFrameworkNames(resourceRcp); err != nil {
 			return err
 		}
+		fmt.Println("o> loading the required framework data")
 		nameToFramework, err := p.getFrameworkNameToFramework(resourceRcp)
 		if err != nil {
 			return err
 		}
+		fmt.Println("o> loading the required validator")
 		nameToValidator, err := p.getFrameworkNameToValidator(nameToFramework)
 		if err != nil {
 			return err
 		}
+		fmt.Println("o> loading the required evaluator")
 		nameToEvaluator, err := p.getFrameworkNameToEvaluator(nameToFramework)
 		if err != nil {
 			return err
 		}
+		fmt.Println("o> executing resource")
 		if err := p.executeResource(resourceRcp, nameToValidator, nameToEvaluator); err != nil {
 			return err
 		}
+		fmt.Println()
 	}
 	return nil
 }
