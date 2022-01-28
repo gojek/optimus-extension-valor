@@ -8,6 +8,11 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+const (
+	jsonType = "json"
+	yamlType = "yaml"
+)
+
 // ToJSON formats input from YAML to JSON
 func ToJSON(input []byte) ([]byte, error) {
 	var t interface{}
@@ -23,7 +28,7 @@ func ToJSON(input []byte) ([]byte, error) {
 }
 
 func init() {
-	err := formatter.Formats.Register("yaml", "json", ToJSON)
+	err := formatter.Formats.Register(yamlType, jsonType, ToJSON)
 	if err != nil {
 		panic(err)
 	}

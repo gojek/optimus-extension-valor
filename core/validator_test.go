@@ -15,17 +15,18 @@ type ValidatorSuite struct {
 }
 
 func (v *ValidatorSuite) TestValidate() {
-	v.Run("should return error if resource data is nil", func() {
+	v.Run("should return false and error if resource data is nil", func() {
 		framework := &model.Framework{}
 		var resourceData *model.Data = nil
 		validator, _ := core.NewValidator(framework)
 
-		_, actualErr := validator.Validate(resourceData)
+		actualSuccess, actualErr := validator.Validate(resourceData)
 
+		v.False(actualSuccess)
 		v.NotNil(actualErr)
 	})
 
-	v.Run("should return error if schema data is nil", func() {
+	v.Run("should return false and error if schema data is nil", func() {
 		framework := &model.Framework{
 			Schemas: []*model.Schema{
 				{
@@ -37,12 +38,13 @@ func (v *ValidatorSuite) TestValidate() {
 		resourceData := &model.Data{}
 		validator, _ := core.NewValidator(framework)
 
-		_, actualErr := validator.Validate(resourceData)
+		actualSuccess, actualErr := validator.Validate(resourceData)
 
+		v.False(actualSuccess)
 		v.NotNil(actualErr)
 	})
 
-	v.Run("should return error if validation returns error", func() {
+	v.Run("should return false and nil if validation execution success but is business error", func() {
 		schemaContent := `{
     "title": "user_account",
     "description": "Schema to validate user_account.",
@@ -80,8 +82,8 @@ func (v *ValidatorSuite) TestValidate() {
 		}
 		resourceContent := `{
     "email": "valor@github.com",
-    "membership": "premium",
-    "is_active": 1
+    "membership": "invalid",
+    "is_active": true
 }
 `
 		resourceData := &model.Data{
@@ -89,12 +91,13 @@ func (v *ValidatorSuite) TestValidate() {
 		}
 		validator, _ := core.NewValidator(framework)
 
-		_, actualErr := validator.Validate(resourceData)
+		actualSuccess, actualErr := validator.Validate(resourceData)
 
-		v.NotNil(actualErr)
+		v.True(actualSuccess)
+		v.Nil(actualErr)
 	})
 
-	v.Run("should return nil if validation success", func() {
+	v.Run("should return true and nil if validation execution and business are success", func() {
 		schemaContent := `{
     "title": "user_account",
     "description": "Schema to validate user_account.",
@@ -141,8 +144,9 @@ func (v *ValidatorSuite) TestValidate() {
 		}
 		validator, _ := core.NewValidator(framework)
 
-		_, actualErr := validator.Validate(resourceData)
+		actualSuccess, actualErr := validator.Validate(resourceData)
 
+		v.True(actualSuccess)
 		v.Nil(actualErr)
 	})
 }

@@ -100,7 +100,6 @@ func buildAllDefinitions(evaluate model.Evaluate, definitions []*model.Definitio
 				m.Unlock()
 			}
 		}(i, wg, mtx, def)
-
 	}
 	wg.Wait()
 

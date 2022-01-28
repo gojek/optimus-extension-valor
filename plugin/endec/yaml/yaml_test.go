@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/gojek/optimus-extension-valor/plugin/endec/yaml"
+
 	"github.com/stretchr/testify/assert"
 )
 

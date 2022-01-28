@@ -83,15 +83,15 @@ func (p *Pipeline) Execute() error {
 		if err := p.validateFrameworkNames(resourceRcp); err != nil {
 			return err
 		}
-		nameToFramework, err := p.getNameToFramework(resourceRcp)
+		nameToFramework, err := p.getFrameworkNameToFramework(resourceRcp)
 		if err != nil {
 			return err
 		}
-		nameToValidator, err := p.getNameToValidator(nameToFramework)
+		nameToValidator, err := p.getFrameworkNameToValidator(nameToFramework)
 		if err != nil {
 			return err
 		}
-		nameToEvaluator, err := p.getNameToEvaluator(nameToFramework)
+		nameToEvaluator, err := p.getFrameworkNameToEvaluator(nameToFramework)
 		if err != nil {
 			return err
 		}
@@ -192,7 +192,7 @@ func (p *Pipeline) executeResource(resourceRcp *recipe.Resource, nameToValidator
 	return nil
 }
 
-func (p *Pipeline) getNameToValidator(nameToFramework map[string]*model.Framework) (map[string]*Validator, error) {
+func (p *Pipeline) getFrameworkNameToValidator(nameToFramework map[string]*model.Framework) (map[string]*Validator, error) {
 	outputValidator := make(map[string]*Validator)
 	outputError := make(model.Error)
 	for name, framework := range nameToFramework {
@@ -209,7 +209,7 @@ func (p *Pipeline) getNameToValidator(nameToFramework map[string]*model.Framewor
 	return outputValidator, nil
 }
 
-func (p *Pipeline) getNameToEvaluator(nameToFramework map[string]*model.Framework) (map[string]*Evaluator, error) {
+func (p *Pipeline) getFrameworkNameToEvaluator(nameToFramework map[string]*model.Framework) (map[string]*Evaluator, error) {
 	wg := &sync.WaitGroup{}
 	mtx := &sync.Mutex{}
 
@@ -239,7 +239,7 @@ func (p *Pipeline) getNameToEvaluator(nameToFramework map[string]*model.Framewor
 	return outputEvaluator, nil
 }
 
-func (p *Pipeline) getNameToFramework(rcp *recipe.Resource) (map[string]*model.Framework, error) {
+func (p *Pipeline) getFrameworkNameToFramework(rcp *recipe.Resource) (map[string]*model.Framework, error) {
 	wg := &sync.WaitGroup{}
 	mtx := &sync.Mutex{}
 

@@ -40,34 +40,38 @@ func (v *Validator) Validate(resourceData *model.Data) (bool, error) {
 		return false, errors.New("resource data is nil")
 	}
 	for _, schema := range v.framework.Schemas {
+		if schema.Data == nil {
+			return false, fmt.Errorf("schema data is nil")
+		}
 		schemaLoader := gojsonschema.NewStringLoader(string(schema.Data.Content))
 		recordLoader := gojsonschema.NewStringLoader(string(resourceData.Content))
 		result, validateErr := gojsonschema.Validate(schemaLoader, recordLoader)
 		if validateErr != nil {
 			return false, validateErr
 		}
-		if !result.Valid() {
-			businessOutput := make(model.Error)
-			for _, r := range result.Errors() {
-				field := r.Field()
-				msg := r.Description()
-				businessOutput[field] = msg
+		if result.Valid() {
+			continue
+		}
+		businessOutput := make(model.Error)
+		for _, r := range result.Errors() {
+			field := r.Field()
+			msg := r.Description()
+			businessOutput[field] = msg
+		}
+		if len(businessOutput) > 0 {
+			success, err := treatOutput(
+				&model.Data{
+					Type:    resourceData.Type,
+					Path:    resourceData.Path,
+					Content: businessOutput.JSON(),
+				},
+				schema.Output,
+			)
+			if err != nil {
+				return false, err
 			}
-			if len(businessOutput) > 0 {
-				success, err := treatOutput(
-					&model.Data{
-						Type:    resourceData.Type,
-						Path:    resourceData.Path,
-						Content: businessOutput.JSON(),
-					},
-					schema.Output,
-				)
-				if err != nil {
-					return false, err
-				}
-				if !success {
-					return false, nil
-				}
+			if !success {
+				return false, nil
 			}
 		}
 	}

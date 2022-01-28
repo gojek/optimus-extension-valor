@@ -53,8 +53,12 @@ func (l *Loader) loadAllProcedures(rcps []*recipe.Procedure) ([]*model.Procedure
 
 			procedure, err := l.LoadProcedure(r)
 			if err != nil {
+				key := fmt.Sprintf("%d", idx)
+				if r != nil {
+					key = r.Name
+				}
 				m.Lock()
-				outputError[r.Name] = err
+				outputError[key] = err
 				m.Unlock()
 			} else {
 				m.Lock()
@@ -81,7 +85,7 @@ func (l *Loader) LoadProcedure(rcp *recipe.Procedure) (*model.Procedure, error) 
 		return nil, err
 	}
 	if len(paths) == 0 {
-		return nil, fmt.Errorf("cannot read procedure from recipe [%s]", rcp.Name)
+		return nil, fmt.Errorf("[%s] procedure for recipe [%s] cannot be found", jsonnetFormat, rcp.Name)
 	}
 	data, err := l.LoadData(paths[0], rcp.Type, jsonnetFormat)
 	if err != nil {
@@ -94,25 +98,6 @@ func (l *Loader) LoadProcedure(rcp *recipe.Procedure) (*model.Procedure, error) 
 	}, nil
 }
 
-func (l *Loader) convertOutput(output *recipe.Output) *model.Output {
-	if output == nil {
-		return nil
-	}
-	targets := make([]*model.Target, len(output.Targets))
-	for i, t := range output.Targets {
-		targets[i] = &model.Target{
-			Name:   t.Name,
-			Format: t.Format,
-			Type:   t.Type,
-			Path:   t.Path,
-		}
-	}
-	return &model.Output{
-		TreatAs: model.OutputTreatment(output.TreatAs),
-		Targets: targets,
-	}
-}
-
 func (l *Loader) loadAllSchemas(rcps []*recipe.Schema) ([]*model.Schema, model.Error) {
 	wg := &sync.WaitGroup{}
 	mtx := &sync.Mutex{}
@@ -121,13 +106,17 @@ func (l *Loader) loadAllSchemas(rcps []*recipe.Schema) ([]*model.Schema, model.E
 	outputError := make(model.Error)
 	for i, rcp := range rcps {
 		wg.Add(1)
+
 		go func(idx int, w *sync.WaitGroup, m *sync.Mutex, r *recipe.Schema) {
 			defer wg.Done()
-
 			schema, err := l.LoadSchema(r)
 			if err != nil {
+				key := fmt.Sprintf("%d", idx)
+				if r != nil {
+					key = r.Name
+				}
 				m.Lock()
-				outputError[r.Name] = err
+				outputError[key] = err
 				m.Unlock()
 			} else {
 				m.Lock()
@@ -154,7 +143,7 @@ func (l *Loader) LoadSchema(rcp *recipe.Schema) (*model.Schema, error) {
 		return nil, err
 	}
 	if len(paths) == 0 {
-		return nil, fmt.Errorf("cannot read schema from recipe [%s]", rcp.Name)
+		return nil, fmt.Errorf("[%s] schema for recipe [%s] cannot be found", jsonFormat, rcp.Name)
 	}
 	data, err := l.LoadData(paths[0], rcp.Type, jsonFormat)
 	return &model.Schema{
@@ -162,6 +151,25 @@ func (l *Loader) LoadSchema(rcp *recipe.Schema) (*model.Schema, error) {
 		Data:   data,
 		Output: l.convertOutput(rcp.Output),
 	}, nil
+}
+
+func (l *Loader) convertOutput(output *recipe.Output) *model.Output {
+	if output == nil {
+		return nil
+	}
+	targets := make([]*model.Target, len(output.Targets))
+	for i, t := range output.Targets {
+		targets[i] = &model.Target{
+			Name:   t.Name,
+			Format: t.Format,
+			Type:   t.Type,
+			Path:   t.Path,
+		}
+	}
+	return &model.Output{
+		TreatAs: model.OutputTreatment(output.TreatAs),
+		Targets: targets,
+	}
 }
 
 func (l *Loader) loadAllDefinitions(rcps []*recipe.Definition) ([]*model.Definition, error) {
