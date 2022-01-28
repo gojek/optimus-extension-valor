@@ -60,11 +60,12 @@ And done. Based on the recipe, the output will be printed to the std out, or in 
 
 ```zsh
 ...
-{
-   "email": "valor@github.com",
-   "is_active": true,
-   "membership": "premium"
-}
+---------------------------
+example/resource/valor.json
+---------------------------
+email: valor@github.com
+is_active: true
+membership: premium
 ...
 ```
 

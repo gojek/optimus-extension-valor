@@ -1,6 +1,6 @@
 resources:
 - name: user_account
-  type: dir
+  type: file
   path: ./example/resource
   format: json
   framework_names:
@@ -13,10 +13,16 @@ frameworks:
     type: file
     format: json
     path: ./example/schema/user_account_rule.json
+    output:
+      treat_as: error
+      targets:
+      - name: std_output
+        type: std
+        format: yaml
   definitions:
   - name: memberships
     format: json
-    type: dir
+    type: file
     path: ./example/definition
     function:
       type: file
@@ -26,9 +32,9 @@ frameworks:
     type: file
     format: jsonnet
     path: ./example/procedure/enrich_user_account.jsonnet
-  output:
-    treat_as: error
-    targets:
-    - name: std_output
-      type: std
-      format: yaml
+    output:
+      treat_as: success
+      targets:
+      - name: std_output
+        type: std
+        format: yaml
