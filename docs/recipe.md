@@ -13,7 +13,7 @@ Each recipe should contains one or more resources. An example:
 ```yaml
 resources:
 - name: user_account
-  type: dir
+  type: file
   path: ./example/resource
   format: json
   framework_names:
@@ -42,22 +42,20 @@ Each resource is defined by a structure with the following fields:
         <tr>
             <td>path</td>
             <td>the path where the resource should be read from</td>
-            <td>it has to follow the <b>type</b> format. for example, if the <b>type</b> is <i>dir</i> (to indicate local directory), then the format should follow how a directory path looks like</td>
+            <td>it has to follow the <b>type</b> format. for example, if the <b>type</b> is <i>file</i> (to indicate local file or directory), then the format should follow how a file path looks like</td>
             <td><i>./example/resource</i></td>
         </tr>
         <tr>
             <td rowspan=2>type</td>
             <td rowspan=2>describes the type of path in order to get the resource</td>
-            <td>currently available: <i>file</i> and <i>dir</i></td>
-            <td rowspan=2><i>dir</i></td>
+            <td>currently available: <i>file</i></i></td>
+            <td rowspan=2><i>file</i></td>
         </tr>
         <tr>
             <td>
                 <ul>
                     <li>file</li>
-                    describe that the path is of type <i>file</i>. if the <b>path</b> value is actually a directory but the <b>type</b> is set to be a <i>file</i>, then only the first file in that directory will be read.
-                    <li>dir</li>
-                    describe that the path is of type <i>dir</i>. if the <b>path</b> value is not a directory, then error might be returned.
+                    describe that the path is of type <i>file</i>. if the <b>path</b> value is actually a directory but the <b>type</b> is set to be a <i>file</i>, then all files within that directory will be read.
                 </ul>
             </td>
         </tr>
@@ -91,10 +89,16 @@ frameworks:
     type: file
     format: json
     path: ./example/schema/user_account_rule.json
+    output:
+      treat_as: error
+      targets:
+      - name: std_output
+        type: std
+        format: yaml
   definitions:
   - name: memberships
     format: json
-    type: dir
+    type: file
     path: ./example/definition
     function:
       type: file
@@ -104,11 +108,12 @@ frameworks:
     type: file
     format: jsonnet
     path: ./example/procedure/enrich_user_account.jsonnet
-    output_is_error: false
-  output_targets:
-  - name: std_output
-    type: std
-    format: json
+    output:
+      treat_as: success
+      targets:
+      - name: std_output
+        type: std
+        format: yaml
 ```
 
 The following is the general constructs for a framework:
@@ -119,7 +124,6 @@ name | true | defines the name of a particular framework. | it is suggested to b
 [schemas](#schema) | false | defines how to validate a resource. | it is an array of `schema` that will be executed _sequentially_ and _independently_.| for each schema, the output of validation is either a success or an error message.
 [definitions](#definition) | false | definitions are data input that might be required by **procedure**. **definitions** helps evaluation to be more efficient when external data is referenced multiple times. | it is an array of `definition` that defines how a definition should be prepared. | for each definition, the output is expected to be an array of JSON object.
 [procedures](#procedure) | false | defines how to evaluate a resource. | it is an array of `procedure` that will be executed sequentially with the ability to pass on information from one procedure to the next. | vary, dependig on how the procedure is constructed.
-output_targets | false | defines how an output of validation and/or evaluation should be written out | it is an array of `output_target` that will be executed sequentially and independently. | vary, dependig on the validation and/or evaluation output
 
 ### Schema
 
@@ -131,6 +135,13 @@ name: user_account_rule
 type: file
 format: json
 path: ./example/schema/user_account_rule.json
+output:
+  treat_as: error
+  targets:
+  - name: std_output
+    type: std
+    format: yaml
+    path: ./out
 ...
 ```
 
@@ -139,7 +150,14 @@ Field | Description | Format
 name | the name of schema | it has to be unique within a framework only and should follow _`[a-z_]+`_
 type | the type of data to be read from the path specified by **path** | currently available is `file` only
 format | the format being used to decode the data | currently available is `json` only, pointing that it's a JSON schema
-path | the path where the schema rule to be read from | the valid format based on the **type**
+path | the path where the schema rule to be read from | the valid format based on the **type**. if the specified path is a directory, then only the first file will be used as schema.
+output | defines how output of the schema execution will be handled | it is optional. if it is being set, then its required fields should be specified.
+output.treat_as | treatment that will be run against the output | currently availalbe: `info`, `warning`, `error`, `success`. if it is set to be `error`, then execution will not be continued.
+output.targets | specifies the target output streams to write the result | it is an array of object, that needs to have a least one member
+output.targets[].name | name of the output stream | it can be anything, but should be unique within the targets and should follow _`[a-z_]+`_
+output.targets[].type | the type of output stream | currently available: `file` and `std`, where the `std` is the standard output on console.
+output.targets[].format | format output that will be written | currently available: `yaml` and `json`
+output.targets[].path | the path where to write the output | it is required when the target type is `file` but not considered when it is set to be `std`
 
 _Note that every field mentioned above is mandatory unless stated otherwise._
 
@@ -179,22 +197,22 @@ Definition is external data that could be used by **procedures**. Definition is 
 ...
 name: memberships
 format: json
-type: dir
+type: file
 path: ./example/definition
 function:
-    type: file
-    path: ./example/procedure/construct_membership_dictionary.jsonnet
+  type: file
+  path: ./example/procedure/construct_membership_dictionary.jsonnet
 ...
 ```
 
 Field | Description | Format | Output
 --- | --- | --- | ---
 name | the name of definition | it has to be unique within a framework only and should follow _`[a-z_]+`_ | -
-type | the type of data to be read from the path specified by **path** | currently available is `file` and `dir` | -
+type | the type of data to be read from the path specified by **path** | currently available is `file` | -
 format | the format being used to decode the data | currently available is `json` and `yaml` | -
 path | the path where to read the actual data from | the valid format based on the **type** | -
 function | an optional instruction to build a definition, where the instruction follows the [Jsonnet](https://jsonnet.org/) format | - | dictionary where the key is the **name** and the value is up to the actual function defined under **function.path**
-function.type | defines the type of path specified by **function.path** | it should be valid for the given **function.path** | -
+function.type | defines the type of path specified by **function.path** | it should be valid for the given **function.path** with currently available is `file` | -
 function.path | defines the path where to read the actual function | should be valid according to the **function.type** | -
 
 _Note that every field mentioned above is mandatory unless stated otherwise._
@@ -274,7 +292,12 @@ name: enrich_user_account
 type: file
 format: jsonnet
 path: ./example/procedure/enrich_user_account.jsonnet
-output_is_error: false
+output:
+  treat_as: success
+  targets:
+  - name: std_output
+    type: std
+    format: yaml
 ...
 ```
 
@@ -284,7 +307,13 @@ name | the name of a procedure | it has to be unique within a framework only and
 type | the type of data to be read from the path specified by **path** | currently available is `file` only | -
 format | the format being used to decode the data | currently available is `jsonnet` only | -
 path | the path where to read the actual data from | the valid format based on the **type** | -
-output_is_error | indicates whether output from a procedure is considered as error or not | it is optional, with the default value is `false`, where output is not considered as error
+output | defines how output of the procedure execution will be handled | it is optional. if it is being set, then its required fields should be specified.
+output.treat_as | treatment that will be run against the output | currently availalbe: `info`, `warning`, `error`, `success`. if it is set to be `error`, then execution will not be continued.
+output.targets | specifies the target output streams to write the result | it is an array of object, that needs to have a least one member
+output.targets[].name | name of the output stream | it can be anything, but should be unique within the targets and should follow _`[a-z_]+`_
+output.targets[].type | the type of output stream | currently available: `file` and `std`, where the `std` is the standard output on console.
+output.targets[].format | format output that will be written | currently available: `yaml` and `json`
+output.targets[].path | the path where to write the output | it is required when the target type is `file` but not considered when it is set to be `std`
 
 _Note that every field mentioned above is mandatory unless stated otherwise._
 
@@ -320,28 +349,8 @@ local membership_dict = definition['memberships'];
 ...
 ```
 
-this function wants to extract a definition named `memberships`, and use it as a reference to process its business flow. This function may or may not use the provided parameters, and may or may not return any output. It is entirely up to the user. In the above example, this function outputs an object. And since `output_is_error` is set to be `false`, then this value will be sent to the next pipeline, which can be:
+this function wants to extract a definition named `memberships`, and use it as a reference to process its business flow. This function may or may not use the provided parameters, and may or may not return any output. It is entirely up to the user. In the above example, this function outputs an object. If the funcition returns output, then it will be sent to the next pipeline, which can be:
 
 * a new procedure, where this output will be sent as parameter under `previous`, or
-* an output target, where this output will be written out to output stream, or
+* an output, where this output will be written out to output stream, or
 * nothing, where the output will not be used.
-
-## Output Target
-
-Output target defines how an output would be written. One framework can zero or more output targets. If output target is not defined, then even if procedure returns output, it won't be written out. If output target is defined, but procedure doesn't return output, then no output will be written out. The basic construct of output target is like the following:
-
-```yaml
-...
-name: std_output
-type: std
-format: json
-path: ./output
-...
-```
-
-Field | Description | Format
---- | --- | ---
-name | the name of output target | it has to be unique within a framework only and should follow _`[a-z_]+`_
-type | the type of output target | currently available: `std` (to write to standard output) and `dir` (to write to a directory)
-format | the format for output | currently available: `json` and `yaml`
-path | the path where to write the output | only being used when the **type** is set `dir`

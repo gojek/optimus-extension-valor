@@ -29,7 +29,7 @@ func (f *FactorySuite) TestRegister() {
 		factory := formatter.NewFactory()
 		src := "json"
 		dest := "yaml"
-		var fn model.Format = func(b []byte) ([]byte, model.Error) {
+		var fn model.Format = func(b []byte) ([]byte, error) {
 			return nil, nil
 		}
 		factory.Register(src, dest, fn)
@@ -43,7 +43,7 @@ func (f *FactorySuite) TestRegister() {
 		factory := formatter.NewFactory()
 		src := "json"
 		dest := "yaml"
-		var fn model.Format = func(b []byte) ([]byte, model.Error) {
+		var fn model.Format = func(b []byte) ([]byte, error) {
 			return nil, nil
 		}
 
@@ -58,7 +58,7 @@ func (f *FactorySuite) TestGet() {
 		factory := formatter.NewFactory()
 		src := "json"
 		dest := "yaml"
-		var fn model.Format = func(b []byte) ([]byte, model.Error) {
+		var fn model.Format = func(b []byte) ([]byte, error) {
 			return nil, nil
 		}
 		factory.Register(src, dest, fn)
@@ -73,7 +73,7 @@ func (f *FactorySuite) TestGet() {
 		factory := formatter.NewFactory()
 		src := "json"
 		dest := "yaml"
-		var fn model.Format = func(b []byte) ([]byte, model.Error) {
+		var fn model.Format = func(b []byte) ([]byte, error) {
 			return nil, nil
 		}
 		factory.Register(src, dest, fn)

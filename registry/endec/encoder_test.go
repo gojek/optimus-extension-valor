@@ -27,7 +27,7 @@ func (e *EncodeFactorySuite) TestRegister() {
 	e.Run("should return error fn is already registered", func() {
 		factory := endec.NewEncodeFactory()
 		format := "yaml"
-		var fn model.Encode = func(i interface{}) ([]byte, model.Error) {
+		var fn model.Encode = func(i interface{}) ([]byte, error) {
 			return nil, nil
 		}
 		factory.Register(format, fn)
@@ -40,7 +40,7 @@ func (e *EncodeFactorySuite) TestRegister() {
 	e.Run("should return nil if no error is found", func() {
 		factory := endec.NewEncodeFactory()
 		format := "yaml"
-		var fn model.Encode = func(i interface{}) ([]byte, model.Error) {
+		var fn model.Encode = func(i interface{}) ([]byte, error) {
 			return nil, nil
 		}
 
@@ -55,7 +55,7 @@ func (e *EncodeFactorySuite) TestGet() {
 		factory := endec.NewEncodeFactory()
 		yamlFormat := "yaml"
 		jsonFormat := "json"
-		var fn model.Encode = func(i interface{}) ([]byte, model.Error) {
+		var fn model.Encode = func(i interface{}) ([]byte, error) {
 			return nil, nil
 		}
 		factory.Register(yamlFormat, fn)
@@ -69,7 +69,7 @@ func (e *EncodeFactorySuite) TestGet() {
 	e.Run("should return fn and nil type is found found", func() {
 		factory := endec.NewEncodeFactory()
 		yamlFormat := "yaml"
-		var fn model.Encode = func(i interface{}) ([]byte, model.Error) {
+		var fn model.Encode = func(i interface{}) ([]byte, error) {
 			return nil, nil
 		}
 		factory.Register(yamlFormat, fn)

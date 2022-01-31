@@ -14,25 +14,23 @@ type EncodeFactory struct {
 }
 
 // Register registers a factory function for a type
-func (e *EncodeFactory) Register(_type string, fn model.Encode) model.Error {
-	const defaultErrKey = "Register"
+func (e *EncodeFactory) Register(_type string, fn model.Encode) error {
 	if fn == nil {
-		return model.BuildError(defaultErrKey, errors.New("Encode is nil"))
+		return errors.New("Encode is nil")
 	}
 	_type = strings.ToLower(_type)
 	if e.typeToFn[_type] != nil {
-		return model.BuildError(defaultErrKey, fmt.Errorf("[%s] is already registered", _type))
+		return fmt.Errorf("[%s] is already registered", _type)
 	}
 	e.typeToFn[_type] = fn
 	return nil
 }
 
 // Get gets a factory function based on a type
-func (e *EncodeFactory) Get(_type string) (model.Encode, model.Error) {
-	const defaultErrKey = "Get"
+func (e *EncodeFactory) Get(_type string) (model.Encode, error) {
 	_type = strings.ToLower(_type)
 	if e.typeToFn[_type] == nil {
-		return nil, model.BuildError(defaultErrKey, fmt.Errorf("[%s] is not registered", _type))
+		return nil, fmt.Errorf("[%s] is not registered", _type)
 	}
 	return e.typeToFn[_type], nil
 }

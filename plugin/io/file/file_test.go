@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	defaulDirName   = "./out"
+	defaultDirName  = "./out"
 	defaultFileName = "test.yaml"
 	defaultContent  = "message"
 )
@@ -24,19 +24,19 @@ type FileSuite struct {
 }
 
 func (f *FileSuite) SetupSuite() {
-	if err := os.MkdirAll(defaulDirName, os.ModePerm); err != nil {
+	if err := os.MkdirAll(defaultDirName, os.ModePerm); err != nil {
 		panic(err)
 	}
-	filePath := path.Join(defaulDirName, defaultFileName)
+	filePath := path.Join(defaultDirName, defaultFileName)
 	if err := ioutil.WriteFile(filePath, []byte(defaultContent), os.ModePerm); err != nil {
 		panic(err)
 	}
 }
 
-func (f *FileSuite) TestReadAll() {
+func (f *FileSuite) TestRead() {
 	f.Run("should return error if getPath nil", func() {
 		var getPath model.GetPath = nil
-		var postProcess model.PostProcess = func(path string, content []byte) (*model.Data, model.Error) {
+		var postProcess model.PostProcess = func(path string, content []byte) (*model.Data, error) {
 			return &model.Data{
 				Content: content,
 				Path:    path,
@@ -44,7 +44,7 @@ func (f *FileSuite) TestReadAll() {
 		}
 		reader := file.New(getPath, postProcess)
 
-		actualData, actualErr := reader.ReadAll()
+		actualData, actualErr := reader.Read()
 
 		f.Nil(actualData)
 		f.NotNil(actualErr)
@@ -52,12 +52,12 @@ func (f *FileSuite) TestReadAll() {
 
 	f.Run("should return error if postProcess nil", func() {
 		var getPath model.GetPath = func() string {
-			return defaulDirName
+			return defaultDirName
 		}
 		var postProcess model.PostProcess = nil
 		reader := file.New(getPath, postProcess)
 
-		actualData, actualErr := reader.ReadAll()
+		actualData, actualErr := reader.Read()
 
 		f.Nil(actualData)
 		f.NotNil(actualErr)
@@ -65,14 +65,14 @@ func (f *FileSuite) TestReadAll() {
 
 	f.Run("should return error if error is found when post process", func() {
 		var getPath model.GetPath = func() string {
-			return defaulDirName
+			return defaultDirName
 		}
-		var postProcess model.PostProcess = func(path string, content []byte) (*model.Data, model.Error) {
-			return nil, model.BuildError("test", errors.New("test error"))
+		var postProcess model.PostProcess = func(path string, content []byte) (*model.Data, error) {
+			return nil, errors.New("test error")
 		}
 		reader := file.New(getPath, postProcess)
 
-		actualData, actualErr := reader.ReadAll()
+		actualData, actualErr := reader.Read()
 
 		f.Nil(actualData)
 		f.NotNil(actualErr)
@@ -80,9 +80,9 @@ func (f *FileSuite) TestReadAll() {
 
 	f.Run("should return value if no error is found", func() {
 		var getPath model.GetPath = func() string {
-			return path.Join(defaulDirName, defaultFileName)
+			return path.Join(defaultDirName, defaultFileName)
 		}
-		var postProcess model.PostProcess = func(path string, content []byte) (*model.Data, model.Error) {
+		var postProcess model.PostProcess = func(path string, content []byte) (*model.Data, error) {
 			return &model.Data{
 				Content: content,
 				Path:    path,
@@ -90,79 +90,40 @@ func (f *FileSuite) TestReadAll() {
 		}
 		reader := file.New(getPath, postProcess)
 
-		actualData, actualErr := reader.ReadAll()
+		actualData, actualErr := reader.Read()
 
 		f.NotNil(actualData)
 		f.Nil(actualErr)
 	})
 }
 
-func (f *FileSuite) TestReadOne() {
-	f.Run("should return error if getPath nil", func() {
-		var getPath model.GetPath = nil
-		var postProcess model.PostProcess = func(path string, content []byte) (*model.Data, model.Error) {
-			return &model.Data{
-				Content: content,
-				Path:    path,
-			}, nil
-		}
-		reader := file.New(getPath, postProcess)
+func (f *FileSuite) TestWrite() {
+	f.Run("should return error if data is nil", func() {
+		reader := file.New(nil, nil)
+		var data *model.Data = nil
 
-		actualData, actualErr := reader.ReadOne()
+		actualErr := reader.Write(data)
 
-		f.Nil(actualData)
 		f.NotNil(actualErr)
 	})
 
-	f.Run("should return error if postProcess nil", func() {
-		var getPath model.GetPath = func() string {
-			return defaulDirName
+	f.Run("should return result of write", func() {
+		defer func() { os.RemoveAll("./output") }()
+		data := &model.Data{
+			Type:    "file",
+			Path:    path.Join(defaultDirName, defaultFileName),
+			Content: []byte(defaultContent),
 		}
-		var postProcess model.PostProcess = nil
-		reader := file.New(getPath, postProcess)
+		reader := file.New(nil, nil)
 
-		actualData, actualErr := reader.ReadOne()
+		actualErr := reader.Write(data)
 
-		f.Nil(actualData)
-		f.NotNil(actualErr)
-	})
-
-	f.Run("should return error if error is found when post process", func() {
-		var getPath model.GetPath = func() string {
-			return defaulDirName
-		}
-		var postProcess model.PostProcess = func(path string, content []byte) (*model.Data, model.Error) {
-			return nil, model.BuildError("test", errors.New("test error"))
-		}
-		reader := file.New(getPath, postProcess)
-
-		actualData, actualErr := reader.ReadOne()
-
-		f.Nil(actualData)
-		f.NotNil(actualErr)
-	})
-
-	f.Run("should return value if no error is found", func() {
-		var getPath model.GetPath = func() string {
-			return path.Join(defaulDirName, defaultFileName)
-		}
-		var postProcess model.PostProcess = func(path string, content []byte) (*model.Data, model.Error) {
-			return &model.Data{
-				Content: content,
-				Path:    path,
-			}, nil
-		}
-		reader := file.New(getPath, postProcess)
-
-		actualData, actualErr := reader.ReadOne()
-
-		f.NotNil(actualData)
 		f.Nil(actualErr)
 	})
 }
 
 func (f *FileSuite) TearDownSuite() {
-	if err := os.RemoveAll(defaulDirName); err != nil {
+	if err := os.RemoveAll(defaultDirName); err != nil {
 		panic(err)
 	}
 }

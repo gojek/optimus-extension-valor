@@ -28,7 +28,7 @@ func getResourceCmd() *cobra.Command {
 		Use:   "resource",
 		Short: "Execute pipeline for a specific resource",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			enrich := func(rcp *recipe.Recipe) model.Error {
+			enrich := func(rcp *recipe.Recipe) error {
 				return enrichRecipe(rcp, &resourceArg{
 					Name:   name,
 					Format: format,
@@ -36,10 +36,11 @@ func getResourceCmd() *cobra.Command {
 					Path:   path,
 				})
 			}
-			if err := executePipeline(recipePath, batchSize, progressType, enrich); err != nil {
-				return errors.New(string(err.JSON()))
+			err := executePipeline(recipePath, batchSize, progressType, enrich)
+			if e, ok := err.(*model.Error); ok {
+				return errors.New(string(e.JSON()))
 			}
-			return nil
+			return err
 		},
 	}
 	resourceCmd.Flags().StringVarP(&name, "name", "n", "", "name of the resource recipe to be used")
@@ -51,7 +52,7 @@ func getResourceCmd() *cobra.Command {
 	return resourceCmd
 }
 
-func enrichRecipe(rcp *recipe.Recipe, arg *resourceArg) model.Error {
+func enrichRecipe(rcp *recipe.Recipe, arg *resourceArg) error {
 	if arg.Name == "" {
 		return nil
 	}
@@ -71,12 +72,8 @@ func enrichRecipe(rcp *recipe.Recipe, arg *resourceArg) model.Error {
 			break
 		}
 	}
-	const defaultErrKey = "enrichRecipe"
 	if resourceRcp == nil {
-		return model.BuildError(
-			defaultErrKey,
-			fmt.Errorf("resource recipe [%s] is not found", arg.Name),
-		)
+		return fmt.Errorf("resource recipe [%s] is not found", arg.Name)
 	}
 	rcp.Resources = []*recipe.Resource{resourceRcp}
 	return nil

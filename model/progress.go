@@ -2,7 +2,7 @@ package model
 
 // Progress is a contract for process progress
 type Progress interface {
-	Increment()
+	Increase(int)
 	Wait()
 }
 

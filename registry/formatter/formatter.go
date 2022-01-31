@@ -17,15 +17,14 @@ type Factory struct {
 }
 
 // Register registers a factory function for a specified source and destination
-func (f *Factory) Register(src, dest string, fn model.Format) model.Error {
-	const defaultErrKey = "Register"
+func (f *Factory) Register(src, dest string, fn model.Format) error {
 	if fn == nil {
-		return model.BuildError(defaultErrKey, errors.New("Format is nil"))
+		return errors.New("Format is nil")
 	}
 	src = strings.ToLower(src)
 	dest = strings.ToLower(dest)
 	if f.srcToDestToFn[src] != nil && f.srcToDestToFn[src][dest] != nil {
-		return model.BuildError(defaultErrKey, fmt.Errorf("[source: %s | target: %s] is already registered", src, dest))
+		return fmt.Errorf("[source: %s | target: %s] is already registered", src, dest)
 	}
 	if f.srcToDestToFn[src] == nil {
 		f.srcToDestToFn[src] = make(map[string]model.Format)
@@ -35,12 +34,11 @@ func (f *Factory) Register(src, dest string, fn model.Format) model.Error {
 }
 
 // Get gets a factory function based on a specified source and destination
-func (f *Factory) Get(src, dest string) (model.Format, model.Error) {
-	const defaultErrKey = "Get"
+func (f *Factory) Get(src, dest string) (model.Format, error) {
 	src = strings.ToLower(src)
 	dest = strings.ToLower(dest)
 	if f.srcToDestToFn[src] == nil || f.srcToDestToFn[src][dest] == nil {
-		return nil, model.BuildError(defaultErrKey, fmt.Errorf("[source: %s | target: %s] is not registered", src, dest))
+		return nil, fmt.Errorf("[source: %s | target: %s] is not registered", src, dest)
 	}
 	return f.srcToDestToFn[src][dest], nil
 }

@@ -4,15 +4,12 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/gojek/optimus-extension-valor/model"
 	"github.com/gojek/optimus-extension-valor/recipe"
 
 	"github.com/stretchr/testify/assert"
 )
 
 func TestValidate(t *testing.T) {
-	const defaultErrKey = "Validate"
-
 	t.Run("should return error if validator returns error", func(t *testing.T) {
 		var rcp *recipe.Recipe = nil
 
@@ -74,7 +71,7 @@ func TestValidate(t *testing.T) {
 			},
 		}
 
-		expectedErr := model.BuildError(defaultErrKey, errors.New("duplicate resource recipe [resource1]"))
+		expectedErr := errors.New("duplicate resource recipe [resource1]")
 
 		actualErr := recipe.Validate(rcp)
 
@@ -128,7 +125,7 @@ func TestValidate(t *testing.T) {
 			},
 		}
 
-		expectedErr := model.BuildError(defaultErrKey, errors.New("duplicate framework recipe [evaluate1]"))
+		expectedErr := errors.New("duplicate framework recipe [evaluate1]")
 
 		actualErr := recipe.Validate(rcp)
 
@@ -160,8 +157,6 @@ func TestValidate(t *testing.T) {
 }
 
 func TestValidateResource(t *testing.T) {
-	const defaultErrKey = "ValidateResource"
-
 	t.Run("should return error if validator returns error", func(t *testing.T) {
 		var rcp *recipe.Resource = nil
 
@@ -186,8 +181,6 @@ func TestValidateResource(t *testing.T) {
 }
 
 func TestValidateFramework(t *testing.T) {
-	const defaultErrKey = "ValidateFramework"
-
 	t.Run("should return error if validator returns error", func(t *testing.T) {
 		var rcp *recipe.Framework = nil
 

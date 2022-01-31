@@ -4,17 +4,13 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/gojek/optimus-extension-valor/model"
-
 	"github.com/go-playground/validator/v10"
 )
 
-const defaultValidateKey = "Validate"
-
 // Validate validates the recipe
-func Validate(rcp *Recipe) model.Error {
+func Validate(rcp *Recipe) error {
 	if err := validator.New().Struct(rcp); err != nil {
-		return model.BuildError(defaultValidateKey, err)
+		return err
 	}
 	if err := validateAllResources(rcp.Resources); err != nil {
 		return err
@@ -22,7 +18,7 @@ func Validate(rcp *Recipe) model.Error {
 	return validateAllFrameworks(rcp.Frameworks)
 }
 
-func validateAllResources(rcps []*Resource) model.Error {
+func validateAllResources(rcps []*Resource) error {
 	nameEncountered := make(map[string]int)
 	for _, resourceRcp := range rcps {
 		if err := ValidateResource(resourceRcp); err != nil {
@@ -37,17 +33,13 @@ func validateAllResources(rcps []*Resource) model.Error {
 		}
 	}
 	if len(duplicateNames) > 0 {
-		return model.BuildError(
-			defaultValidateKey,
-			fmt.Errorf("duplicate resource recipe [%s]",
-				strings.Join(duplicateNames, ", "),
-			),
-		)
+		return fmt.Errorf("duplicate resource recipe [%s]",
+			strings.Join(duplicateNames, ", "))
 	}
 	return nil
 }
 
-func validateAllFrameworks(rcps []*Framework) model.Error {
+func validateAllFrameworks(rcps []*Framework) error {
 	nameEncountered := make(map[string]int)
 	for _, frameworkRcp := range rcps {
 		if err := ValidateFramework(frameworkRcp); err != nil {
@@ -62,30 +54,24 @@ func validateAllFrameworks(rcps []*Framework) model.Error {
 		}
 	}
 	if len(duplicateNames) > 0 {
-		return model.BuildError(
-			defaultValidateKey,
-			fmt.Errorf("duplicate framework recipe [%s]",
-				strings.Join(duplicateNames, ", "),
-			),
-		)
+		return fmt.Errorf("duplicate framework recipe [%s]",
+			strings.Join(duplicateNames, ", "))
 	}
 	return nil
 }
 
 // ValidateResource validates the recipe for a Resource
-func ValidateResource(resourceRcp *Resource) model.Error {
-	const defaultErrKey = "ValidateResource"
+func ValidateResource(resourceRcp *Resource) error {
 	if err := validator.New().Struct(resourceRcp); err != nil {
-		return model.BuildError(defaultErrKey, err)
+		return err
 	}
 	return nil
 }
 
 // ValidateFramework validates the recipe for a Framework
-func ValidateFramework(frameworkRcp *Framework) model.Error {
-	const defaultErrKey = "ValidateFramework"
+func ValidateFramework(frameworkRcp *Framework) error {
 	if err := validator.New().Struct(frameworkRcp); err != nil {
-		return model.BuildError(defaultErrKey, err)
+		return err
 	}
 	return nil
 }

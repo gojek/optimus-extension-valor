@@ -7,7 +7,6 @@ import (
 	"sync"
 
 	"github.com/gojek/optimus-extension-valor/model"
-	"github.com/gojek/optimus-extension-valor/registry/endec"
 )
 
 // Evaluator contains information on how to evaluate a Resource
@@ -18,13 +17,12 @@ type Evaluator struct {
 }
 
 // NewEvaluator initializes Evaluator
-func NewEvaluator(framework *model.Framework, evaluate model.Evaluate) (*Evaluator, model.Error) {
-	const defaultErrKey = "NewEvaluator"
+func NewEvaluator(framework *model.Framework, evaluate model.Evaluate) (*Evaluator, error) {
 	if framework == nil {
-		return nil, model.BuildError(defaultErrKey, errors.New("framework is nil"))
+		return nil, errors.New("framework is nil")
 	}
 	if evaluate == nil {
-		return nil, model.BuildError(defaultErrKey, errors.New("evaluate is nil"))
+		return nil, errors.New("evaluate function is nil")
 	}
 	definitionSnippet, err := buildAllDefinitions(evaluate, framework.Definitions)
 	if err != nil {
@@ -38,95 +36,87 @@ func NewEvaluator(framework *model.Framework, evaluate model.Evaluate) (*Evaluat
 }
 
 // Evaluate evaluates snippet for a Resource data
-func (e *Evaluator) Evaluate(resourceData *model.Data) (string, model.Error) {
-	const defaultErrKey = "Evaluate"
+func (e *Evaluator) Evaluate(resourceData *model.Data) (bool, error) {
 	if resourceData == nil {
-		return model.SkipNullValue, model.BuildError(defaultErrKey, errors.New("resource data is nil"))
+		return false, errors.New("resource data is nil")
 	}
 	resourceSnippet := string(resourceData.Content)
 	previousOutputSnippet := model.SkipNullValue
-	for _, procedure := range e.framework.Procedures {
+	for i, procedure := range e.framework.Procedures {
+		if procedure == nil {
+			return false, fmt.Errorf("procedure [%d] is nil", i)
+		}
 		snippet, err := buildSnippet(resourceSnippet, e.definitionSnippet, previousOutputSnippet, procedure)
 		if err != nil {
-			return model.SkipNullValue, err
+			return false, err
 		}
 		result, evalErr := e.evaluate(procedure.Name, snippet)
 		if evalErr != nil {
-			return model.SkipNullValue, model.BuildError(defaultErrKey, evalErr)
+			return false, evalErr
 		}
 		if model.IsSkipResult[result] {
 			previousOutputSnippet = model.SkipNullValue
 		} else {
-			evalResult := e.resultToError(result)
-			if procedure.OutputIsError {
-				return model.SkipNullValue, evalResult
+			success, err := treatOutput(
+				&model.Data{
+					Type:    resourceData.Type,
+					Path:    resourceData.Path,
+					Content: []byte(result),
+				},
+				procedure.Output,
+			)
+			if err != nil {
+				return false, err
+			}
+			if !success {
+				return false, nil
 			}
 			previousOutputSnippet = result
 		}
 	}
-	return previousOutputSnippet, nil
+	return true, nil
 }
 
-func (e *Evaluator) resultToError(result string) model.Error {
-	const defaultErrKey = "evaluation result"
-	fn, err := endec.Decodes.Get(jsonFormat)
-	if err != nil {
-		return err
-	}
-	var tmp interface{}
-	if err = fn([]byte(result), &tmp); err != nil {
-		return model.BuildError(defaultErrKey, errors.New(result))
-	}
-	return model.BuildError(defaultErrKey, tmp)
-}
-
-func buildAllDefinitions(evaluate model.Evaluate, definitions []*model.Definition) (string, model.Error) {
-	const defaultErrKey = "buildAllDefinitions"
-
+func buildAllDefinitions(evaluate model.Evaluate, definitions []*model.Definition) (string, error) {
 	wg := &sync.WaitGroup{}
 	mtx := &sync.Mutex{}
 
 	nameToSnippet := make(map[string]string)
-	outputError := make(model.Error)
+	outputError := &model.Error{}
 	for i, def := range definitions {
 		wg.Add(1)
 
-		go func(idx int, e model.Evaluate, w *sync.WaitGroup, m *sync.Mutex, d *model.Definition) {
+		go func(idx int, w *sync.WaitGroup, m *sync.Mutex, d *model.Definition) {
 			defer w.Done()
-
-			defSnippet, err := buildOneDefinition(e, d)
+			defSnippet, err := buildOneDefinition(evaluate, d)
 			if err != nil {
-				key := fmt.Sprintf("%s [%d]", defaultErrKey, idx)
+				key := fmt.Sprintf("%d", idx)
 				if d != nil {
-					key = fmt.Sprintf("%s [%s]", defaultErrKey, d.Name)
+					key = d.Name
 				}
-				m.Lock()
-				outputError[key] = err
-				m.Unlock()
+				outputError.Add(key, err)
 			} else {
 				m.Lock()
 				nameToSnippet[d.Name] = defSnippet
 				m.Unlock()
 			}
-		}(i, evaluate, wg, mtx, def)
-
+		}(i, wg, mtx, def)
 	}
 	wg.Wait()
 
-	if len(outputError) > 0 {
+	if outputError.Length() > 0 {
 		return model.SkipNullValue, outputError
 	}
 	var outputSnippets []string
 	for key, value := range nameToSnippet {
-		outputSnippets = append(outputSnippets, fmt.Sprintf(`"%s": %s`, key, value))
+		outputSnippets = append(outputSnippets, fmt.Sprintf(`"%s": %s,`, key, value))
 	}
 	return fmt.Sprintf("{%s}", strings.Join(outputSnippets, "\n")), nil
 }
 
-func buildOneDefinition(evaluate model.Evaluate, definition *model.Definition) (string, model.Error) {
-	const defaultErrKey = "buildOneDefinition"
+func buildOneDefinition(evaluate model.Evaluate, definition *model.Definition) (string, error) {
 	if definition == nil {
-		return model.SkipNullValue, model.BuildError(defaultErrKey, errors.New("definition is nil"))
+		return model.SkipNullValue, errors.New("definition is nil")
 	}
 	var defData string
 	for i, data := range definition.ListOfData {
@@ -197,7 +187,7 @@ construct (definition)
 		)
 		result, err := evaluate(definition.Name, defSnippet)
 		if err != nil {
-			return model.SkipNullValue, model.BuildError(defaultErrKey, err)
+			return model.SkipNullValue, err
 		}
 		defSnippet = result
 	}
@@ -209,13 +199,9 @@ func buildSnippet(
 	definitionSnippet string,
 	previousOutputSnippet string,
 	procedure *model.Procedure,
-) (string, model.Error) {
-	const defaultErrKey = "buildSnippet"
-	if procedure == nil {
-		return model.SkipNullValue, model.BuildError(defaultErrKey, errors.New("procedure is nil"))
-	}
+) (string, error) {
 	if procedure.Data == nil {
-		return model.SkipNullValue, model.BuildError(defaultErrKey, errors.New("procedure data is nil"))
+		return model.SkipNullValue, fmt.Errorf("procedure data for [%s] is nil", procedure.Name)
 	}
 	output := fmt.Sprintf(`
 /*

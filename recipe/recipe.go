@@ -17,11 +17,10 @@ type Resource struct {
 
 // Framework is a recipe on how and where to read the actual Framework data
 type Framework struct {
-	Name          string          `yaml:"name" validate:"required"`
-	Definitions   []*Definition   `yaml:"definitions"`
-	Schemas       []*Schema       `yaml:"schemas"`
-	Procedures    []*Procedure    `yaml:"procedures"`
-	OutputTargets []*OutputTarget `yaml:"output_targets"`
+	Name        string        `yaml:"name" validate:"required"`
+	Schemas     []*Schema     `yaml:"schemas"`
+	Definitions []*Definition `yaml:"definitions"`
+	Procedures  []*Procedure  `yaml:"procedures"`
 }
 
 // Definition is a recipe on how and where to read the actual Definition data
@@ -41,21 +40,28 @@ type Function struct {
 
 // Schema is a recipe on how and where to read the actual Schema data
 type Schema struct {
-	Name string `yaml:"name" validate:"required"`
-	Type string `yaml:"type" validate:"required,oneof=dir file"`
-	Path string `yaml:"path" validate:"required"`
+	Name   string  `yaml:"name" validate:"required"`
+	Type   string  `yaml:"type" validate:"required,oneof=dir file"`
+	Path   string  `yaml:"path" validate:"required"`
+	Output *Output `yaml:"output"`
 }
 
 // Procedure is a recipe on how and where to read the actual Procedure data
 type Procedure struct {
-	Name          string `yaml:"name" validate:"required"`
-	Type          string `yaml:"type" validate:"required,oneof=dir file"`
-	Path          string `yaml:"path" validate:"required"`
-	OutputIsError bool   `yaml:"output_is_error"`
+	Name   string  `yaml:"name" validate:"required"`
+	Type   string  `yaml:"type" validate:"required,oneof=dir file"`
+	Path   string  `yaml:"path" validate:"required"`
+	Output *Output `yaml:"output"`
 }
 
-// OutputTarget defines how an output is created
-type OutputTarget struct {
+// Output defines how the last procedure output is written
+type Output struct {
+	TreatAs string    `yaml:"treat_as" validate:"required,oneof=info warning error success"`
+	Targets []*Target `yaml:"targets" validate:"required,min=1"`
+}
+
+// Target defines how an output is written to the targetted stream
+type Target struct {
 	Name   string `yaml:"name" validate:"required"`
 	Format string `yaml:"format" validate:"required,oneof=json yaml"`
 	Type   string `yaml:"type" validate:"required,eq=dir"`

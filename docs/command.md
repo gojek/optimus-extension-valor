@@ -78,7 +78,7 @@ Running the above command will execute all frameworks under `valor.yaml` recipe.
 Flag | Description | Format
 --- | --- | ---
 --batch-size | specify the number of data to be executed paralelly in one batch | it should be an integer more than 0 (zero). it is optional with default value 4 (four).
---progress-type | specify the progress type during execution | currently available: `verbose` (default) and `simple`
+--progress-type | specify the progress type during execution | currently available: `progressive` (default) and `iterative`
 --recipe-path | customize the recipe that will be executed | it is optional. the value should be a valid recipe path
 
 This command also has sub-command. The currently available sub-commands are explained below.

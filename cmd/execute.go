@@ -17,7 +17,7 @@ import (
 
 const (
 	defaultBatchSize    = 4
-	defaultProgressType = "verbose"
+	defaultProgressType = "progressive"
 )
 
 var (
@@ -30,10 +30,7 @@ func getExecuteCmd() *cobra.Command {
 		Use:   "execute",
 		Short: "Execute pipeline based on the specified recipe",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := executePipeline(recipePath, batchSize, progressType, nil); err != nil {
-				return errors.New(string(err.JSON()))
-			}
-			return nil
+			return executePipeline(recipePath, batchSize, progressType, nil)
 		},
 	}
 	runCmd.PersistentFlags().StringVarP(&recipePath, "recipe-path", "R", defaultRecipePath, "Path of the recipe file")
@@ -44,7 +41,7 @@ func getExecuteCmd() *cobra.Command {
 	return runCmd
 }
 
-func executePipeline(recipePath string, batchSize int, progressType string, enrich func(*recipe.Recipe) model.Error) model.Error {
+func executePipeline(recipePath string, batchSize int, progressType string, enrich func(*recipe.Recipe) error) error {
 	rcp, err := loadRecipe(recipePath, defaultRecipeType, defaultRecipeFormat)
 	if err != nil {
 		return err
@@ -62,14 +59,15 @@ func executePipeline(recipePath string, batchSize int, progressType string, enri
 		return err
 	}
 	evaluate := getEvaluate()
-	pipeline, err := core.NewPipeline(rcp, batchSize, evaluate, newProgress)
+	pipeline, err := core.NewPipeline(rcp, evaluate, batchSize, newProgress)
 	if err != nil {
 		return err
 	}
-	if err := pipeline.Execute(); err != nil {
-		return err
+	err = pipeline.Execute()
+	if e, ok := err.(*model.Error); ok {
+		return errors.New(string(e.JSON()))
 	}
-	return nil
+	return err
 }
 
 func getEvaluate() model.Evaluate {
@@ -79,7 +77,7 @@ func getEvaluate() model.Evaluate {
 	}
 }
 
-func loadRecipe(path, _type, format string) (*recipe.Recipe, model.Error) {
+func loadRecipe(path, _type, format string) (*recipe.Recipe, error) {
 	fnReader, err := io.Readers.Get(_type)
 	if err != nil {
 		return nil, err
@@ -87,24 +85,17 @@ func loadRecipe(path, _type, format string) (*recipe.Recipe, model.Error) {
 	getPath := func() string {
 		return path
 	}
-	filterPath := func(p string) bool {
-		return true
-	}
-	postProcess := func(p string, c []byte) (*model.Data, model.Error) {
+	postProcess := func(p string, c []byte) (*model.Data, error) {
 		return &model.Data{
 			Content: bytes.ToLower(c),
 			Path:    p,
 			Type:    format,
 		}, nil
 	}
-	reader := fnReader(getPath, filterPath, postProcess)
+	reader := fnReader(getPath, postProcess)
 	decode, err := endec.Decodes.Get(format)
 	if err != nil {
 		return nil, err
 	}
-	rcp, err := recipe.Load(reader, decode)
-	if err != nil {
-		return nil, err
-	}
-	return rcp, nil
+	return recipe.Load(reader, decode)
 }

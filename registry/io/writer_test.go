@@ -14,62 +14,72 @@ type WriterFactorySuite struct {
 	suite.Suite
 }
 
-func (r *WriterFactorySuite) TestRegister() {
-	r.Run("should return error if fn is nil", func() {
+func (w *WriterFactorySuite) TestRegister() {
+	w.Run("should return error if fn is nil", func() {
 		factory := io.NewWriterFactory()
 		_type := "file"
-		var writer model.Writer = nil
+		var writerFn io.WriterFn = nil
 
-		actualErr := factory.Register(_type, writer)
+		actualErr := factory.Register(_type, writerFn)
 
-		r.NotNil(actualErr)
+		w.NotNil(actualErr)
 	})
 
-	r.Run("should return error fn is already registered", func() {
+	w.Run("should return error fn is already registered", func() {
 		factory := io.NewWriterFactory()
 		_type := "file"
-		var writer model.Writer = &mocks.Writer{}
-		factory.Register(_type, writer)
+		var writerFn io.WriterFn = func(model.OutputTreatment) model.Writer {
+			return &mocks.Writer{}
+		}
+		factory.Register(_type, writerFn)
 
-		actualErr := factory.Register(_type, writer)
+		actualErr := factory.Register(_type, writerFn)
 
-		r.NotNil(actualErr)
+		w.NotNil(actualErr)
 	})
 
-	r.Run("should return nil if no error is found", func() {
+	w.Run("should return nil if no error is found", func() {
 		factory := io.NewWriterFactory()
 		_type := "file"
-		var writer model.Writer = &mocks.Writer{}
+		var writerFn io.WriterFn = func(model.OutputTreatment) model.Writer {
+			return &mocks.Writer{}
+		}
 
-		actualErr := factory.Register(_type, writer)
+		actualErr := factory.Register(_type, writerFn)
 
-		r.Nil(actualErr)
+		w.Nil(actualErr)
 	})
 }
 
-func (r *WriterFactorySuite) TestGet() {
-	r.Run("should return nil and error type is not found", func() {
+func (w *WriterFactorySuite) TestGet() {
+	w.Run("should return nil and error type is not found", func() {
 		factory := io.NewWriterFactory()
 		_type := "file"
-		var writer model.Writer = &mocks.Writer{}
-		factory.Register(_type, writer)
+		var writerFn io.WriterFn = func(model.OutputTreatment) model.Writer {
+			return &mocks.Writer{}
+		}
+		factory.Register(_type, writerFn)
+		factory.Register(_type, writerFn)
 
 		actualWriter, actualErr := factory.Get("dir")
 
-		r.Nil(actualWriter)
-		r.NotNil(actualErr)
+		w.Nil(actualWriter)
+		w.NotNil(actualErr)
 	})
 
-	r.Run("should return fn and nil type is found found", func() {
+	w.Run("should return fn and nil type is found found", func() {
 		factory := io.NewWriterFactory()
 		_type := "file"
-		var writer model.Writer = &mocks.Writer{}
-		factory.Register(_type, writer)
+		var writerFn io.WriterFn = func(model.OutputTreatment) model.Writer {
+			return &mocks.Writer{}
+		}
+		factory.Register(_type, writerFn)
+		factory.Register(_type, writerFn)
 
 		actualWriter, actualErr := factory.Get(_type)
 
-		r.NotNil(actualWriter)
-		r.Nil(actualErr)
+		w.NotNil(actualWriter)
+		w.Nil(actualErr)
 	})
 }
 
