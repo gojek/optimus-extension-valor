@@ -102,7 +102,7 @@ func (p *Pipeline) Execute() error {
 			return err
 		}
 		fmt.Println("o> executing resource")
-		if err := p.executeResource(resourceRcp, nameToValidator, nameToEvaluator); err != nil {
+		if err := p.executeOnResource(resourceRcp, nameToValidator, nameToEvaluator); err != nil {
 			return err
 		}
 		fmt.Println()
@@ -110,7 +110,7 @@ func (p *Pipeline) Execute() error {
 	return nil
 }
 
-func (p *Pipeline) executeResource(resourceRcp *recipe.Resource, nameToValidator map[string]*Validator, nameToEvaluator map[string]*Evaluator) error {
+func (p *Pipeline) executeOnResource(resourceRcp *recipe.Resource, nameToValidator map[string]*Validator, nameToEvaluator map[string]*Evaluator) error {
 	if resourceRcp == nil {
 		return errors.New("resource recipe is nil")
 	}
@@ -118,7 +118,38 @@ func (p *Pipeline) executeResource(resourceRcp *recipe.Resource, nameToValidator
 	if err != nil {
 		return err
 	}
+
 	outputError := &model.Error{}
+	handleErr := func(resourcePath, processType, frameworkName string, success bool, err error) bool {
+		if err != nil {
+			var message string
+			if e, ok := err.(*model.Error); ok {
+				message = string(e.JSON())
+			} else {
+				message = err.Error()
+			}
+			errorWriter.Write(&model.Data{
+				Type:    "std",
+				Path:    resourcePath,
+				Content: []byte(message),
+			})
+			outputError.Add(resourcePath,
+				fmt.Errorf("%s on framework [%s] encountered execution error",
+					processType, frameworkName,
+				),
+			)
+			return false
+		}
+		if !success {
+			outputError.Add(resourcePath,
+				fmt.Errorf("%s on framework [%s] encountered business error",
+					processType, frameworkName,
+				),
+			)
+			return false
+		}
+		return true
+	}
 
 	progress := p.newProgress(resourceRcp.Name, len(resourcePaths))
 	batch := p.batchSize
@@ -142,47 +173,17 @@ func (p *Pipeline) executeResource(resourceRcp *recipe.Resource, nameToValidator
 					return
 				}
 				for _, frameworkName := range resourceRcp.FrameworkNames {
-					handleErr := func(process, name string, success bool, err error) bool {
-						if err != nil {
-							var message string
-							if e, ok := err.(*model.Error); ok {
-								message = string(e.JSON())
-							} else {
-								message = err.Error()
-							}
-							errorWriter.Write(&model.Data{
-								Type:    "std",
-								Path:    pt,
-								Content: []byte(message),
-							})
-							outputError.Add(pt,
-								fmt.Errorf("%s on framework [%s] encountered execution error",
-									process, name,
-								),
-							)
-							return false
-						}
-						if !success {
-							outputError.Add(pt,
-								fmt.Errorf("%s on framework [%s] encountered business error",
-									process, name,
-								),
-							)
-							return false
-						}
-						return true
-					}
 					validator := nameToValidator[frameworkName]
 					if validator != nil {
 						success, err := validator.Validate(data)
-						if ok := handleErr("validation", frameworkName, success, err); !ok {
+						if ok := handleErr(pt, "validation", frameworkName, success, err); !ok {
 							return
 						}
 					}
 					evaluator := nameToEvaluator[frameworkName]
 					if evaluator != nil {
 						success, err := evaluator.Evaluate(data)
-						if ok := handleErr("evaluation", frameworkName, success, err); !ok {
+						if ok := handleErr(pt, "evaluation", frameworkName, success, err); !ok {
 							return
 						}
 					}
