@@ -1,7 +1,7 @@
 name="valor"
 dir_output="dist"
-os_list=("darwin" "linux")
-arch_list=("amd64")
+os_list=("darwin" "linux" "windows")
+arch_list=("amd64" "arm64")
 if [ -z ${tag} ]
 then
     tag="latest"
