@@ -61,7 +61,7 @@ func (e *Error) Length() int {
 func (e *Error) buildMap() map[string]interface{} {
 	output := make(map[string]interface{})
 	for key, value := range e.keyToValue {
-		if customErr, ok := value.(Error); ok {
+		if customErr, ok := value.(*Error); ok {
 			mV := customErr.buildMap()
 			output[key] = mV
 		} else {

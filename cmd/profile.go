@@ -32,8 +32,6 @@ func getProfileCmd() *cobra.Command {
 		},
 	}
 	runCmd.PersistentFlags().StringVarP(&recipePath, "recipe-path", "R", defaultRecipePath, "Path of the recipe file")
-
-	runCmd.AddCommand(getResourceCmd())
 	return runCmd
 }
 

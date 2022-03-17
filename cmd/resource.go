@@ -1,10 +1,8 @@
 package cmd
 
 import (
-	"errors"
 	"fmt"
 
-	"github.com/gojek/optimus-extension-valor/model"
 	"github.com/gojek/optimus-extension-valor/recipe"
 
 	"github.com/spf13/cobra"
@@ -36,11 +34,7 @@ func getResourceCmd() *cobra.Command {
 					Path:   path,
 				})
 			}
-			err := executePipeline(recipePath, batchSize, progressType, enrich)
-			if e, ok := err.(*model.Error); ok {
-				return errors.New(string(e.JSON()))
-			}
-			return err
+			return executePipeline(recipePath, progressType, batchSize, enrich)
 		},
 	}
 	resourceCmd.Flags().StringVarP(&name, "name", "n", "", "name of the resource recipe to be used")

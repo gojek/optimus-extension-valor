@@ -200,6 +200,7 @@ func (p *Pipeline) executeOnResource(resourceRcp *recipe.Resource, nameToValidat
 		counter += batch
 	}
 	progress.Wait()
+
 	if outputError.Length() > 0 {
 		return outputError
 	}
@@ -244,10 +245,11 @@ func (p *Pipeline) getFrameworkNameToEvaluator(nameToFramework map[string]*model
 			}
 		}(name, framework, wg, mtx)
 	}
+	wg.Wait()
+
 	if outputError.Length() > 0 {
 		return nil, outputError
 	}
-	wg.Wait()
 	return outputEvaluator, nil
 }
 

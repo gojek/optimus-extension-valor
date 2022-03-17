@@ -30,7 +30,7 @@ func getExecuteCmd() *cobra.Command {
 		Use:   "execute",
 		Short: "Execute pipeline based on the specified recipe",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return executePipeline(recipePath, batchSize, progressType, nil)
+			return executePipeline(recipePath, progressType, batchSize, nil)
 		},
 	}
 	runCmd.PersistentFlags().StringVarP(&recipePath, "recipe-path", "R", defaultRecipePath, "Path of the recipe file")
@@ -41,7 +41,7 @@ func getExecuteCmd() *cobra.Command {
 	return runCmd
 }
 
-func executePipeline(recipePath string, batchSize int, progressType string, enrich func(*recipe.Recipe) error) error {
+func executePipeline(recipePath, progressType string, batchSize int, enrich func(*recipe.Recipe) error) error {
 	rcp, err := loadRecipe(recipePath, defaultRecipeType, defaultRecipeFormat)
 	if err != nil {
 		return err
