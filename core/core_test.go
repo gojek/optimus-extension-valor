@@ -16,12 +16,11 @@ func TestNewPipeline(t *testing.T) {
 		var evaluate model.Evaluate = func(name, snippet string) (string, error) {
 			return "", nil
 		}
-		var batchSize = 0
 		var newProgress model.NewProgress = func(name string, total int) model.Progress {
 			return nil
 		}
 
-		actualPipeline, actualErr := core.NewPipeline(rcp, evaluate, batchSize, newProgress)
+		actualPipeline, actualErr := core.NewPipeline(rcp, evaluate, newProgress)
 
 		assert.Nil(t, actualPipeline)
 		assert.NotNil(t, actualErr)
@@ -30,28 +29,11 @@ func TestNewPipeline(t *testing.T) {
 	t.Run("should return nil and error if evaluate is nil", func(t *testing.T) {
 		var rcp *recipe.Recipe = &recipe.Recipe{}
 		var evaluate model.Evaluate = nil
-		var batchSize = 0
 		var newProgress model.NewProgress = func(name string, total int) model.Progress {
 			return nil
 		}
 
-		actualPipeline, actualErr := core.NewPipeline(rcp, evaluate, batchSize, newProgress)
-
-		assert.Nil(t, actualPipeline)
-		assert.NotNil(t, actualErr)
-	})
-
-	t.Run("should return nil and error if batchSize is less than zero", func(t *testing.T) {
-		var rcp *recipe.Recipe = &recipe.Recipe{}
-		var evaluate model.Evaluate = func(name, snippet string) (string, error) {
-			return "", nil
-		}
-		var batchSize = -1
-		var newProgress model.NewProgress = func(name string, total int) model.Progress {
-			return nil
-		}
-
-		actualPipeline, actualErr := core.NewPipeline(rcp, evaluate, batchSize, newProgress)
+		actualPipeline, actualErr := core.NewPipeline(rcp, evaluate, newProgress)
 
 		assert.Nil(t, actualPipeline)
 		assert.NotNil(t, actualErr)
@@ -62,10 +44,9 @@ func TestNewPipeline(t *testing.T) {
 		var evaluate model.Evaluate = func(name, snippet string) (string, error) {
 			return "", nil
 		}
-		var batchSize = 0
 		var newProgress model.NewProgress = nil
 
-		actualPipeline, actualErr := core.NewPipeline(rcp, evaluate, batchSize, newProgress)
+		actualPipeline, actualErr := core.NewPipeline(rcp, evaluate, newProgress)
 
 		assert.Nil(t, actualPipeline)
 		assert.NotNil(t, actualErr)
@@ -76,12 +57,11 @@ func TestNewPipeline(t *testing.T) {
 		var evaluate model.Evaluate = func(name, snippet string) (string, error) {
 			return "", nil
 		}
-		var batchSize = 0
 		var newProgress model.NewProgress = func(name string, total int) model.Progress {
 			return nil
 		}
 
-		actualPipeline, actualErr := core.NewPipeline(rcp, evaluate, batchSize, newProgress)
+		actualPipeline, actualErr := core.NewPipeline(rcp, evaluate, newProgress)
 
 		assert.NotNil(t, actualPipeline)
 		assert.Nil(t, actualErr)

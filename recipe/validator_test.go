@@ -54,6 +54,7 @@ func TestValidate(t *testing.T) {
 					Format:         "yaml",
 					Type:           "file",
 					Path:           "./valor.yaml",
+					BatchSize:      3,
 					FrameworkNames: []string{"evaluate"},
 				},
 				{
@@ -61,6 +62,7 @@ func TestValidate(t *testing.T) {
 					Format:         "yaml",
 					Type:           "file",
 					Path:           "./valor.yaml",
+					BatchSize:      3,
 					FrameworkNames: []string{"evaluate"},
 				},
 			},
@@ -112,6 +114,7 @@ func TestValidate(t *testing.T) {
 					Format:         "yaml",
 					Type:           "file",
 					Path:           "./valor.yaml",
+					BatchSize:      3,
 					FrameworkNames: []string{"evaluate"},
 				},
 			},
@@ -140,6 +143,7 @@ func TestValidate(t *testing.T) {
 					Format:         "yaml",
 					Type:           "file",
 					Path:           "./valor.yaml",
+					BatchSize:      3,
 					FrameworkNames: []string{"evaluate"},
 				},
 			},
@@ -171,6 +175,7 @@ func TestValidateResource(t *testing.T) {
 			Format:         "yaml",
 			Type:           "file",
 			Path:           "./valor.yaml",
+			BatchSize:      3,
 			FrameworkNames: []string{"evaluate"},
 		}
 

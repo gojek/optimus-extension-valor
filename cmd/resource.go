@@ -34,7 +34,7 @@ func getResourceCmd() *cobra.Command {
 					Path:   path,
 				})
 			}
-			return executePipeline(recipePath, progressType, batchSize, enrich)
+			return executePipeline(recipePath, progressType, enrich)
 		},
 	}
 	resourceCmd.Flags().StringVarP(&name, "name", "n", "", "name of the resource recipe to be used")

@@ -12,6 +12,7 @@ type Resource struct {
 	Format         string   `yaml:"format" validate:"required,oneof=json yaml"`
 	Type           string   `yaml:"type" validate:"required,oneof=dir file"`
 	Path           string   `yaml:"path" validate:"required"`
+	BatchSize      int      `yaml:"batch_size" validate:"required"`
 	FrameworkNames []string `yaml:"framework_names" validate:"required,min=1"`
 }
 

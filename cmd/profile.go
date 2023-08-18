@@ -37,12 +37,12 @@ func getProfileCmd() *cobra.Command {
 
 func getResourceTable(rcp *recipe.Recipe) *tablewriter.Table {
 	table := tablewriter.NewWriter(os.Stdout)
-	table.SetHeader([]string{"Name", "Format", "Type", "Path", "Framework"})
+	table.SetHeader([]string{"Name", "Format", "Type", "Path", "Batch Size", "Framework"})
 	table.SetAutoMergeCells(true)
 	table.SetRowLine(true)
 	for _, r := range rcp.Resources {
 		for _, frameworkName := range r.FrameworkNames {
-			table.Append([]string{r.Name, r.Format, r.Type, r.Path, frameworkName})
+			table.Append([]string{r.Name, r.Format, r.Type, r.Path, fmt.Sprintf("%d", r.BatchSize), frameworkName})
 		}
 	}
 	return table
