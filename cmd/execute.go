@@ -15,33 +15,26 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const (
-	defaultBatchSize    = 4
-	defaultProgressType = "progressive"
-)
+const defaultProgressType = "progressive"
 
-var (
-	batchSize    int
-	progressType string
-)
+var progressType string
 
 func getExecuteCmd() *cobra.Command {
 	runCmd := &cobra.Command{
 		Use:   "execute",
 		Short: "Execute pipeline based on the specified recipe",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return executePipeline(recipePath, progressType, batchSize, nil)
+			return executePipeline(recipePath, progressType, enrichWithBatchSize)
 		},
 	}
 	runCmd.PersistentFlags().StringVarP(&recipePath, "recipe-path", "R", defaultRecipePath, "Path of the recipe file")
-	runCmd.PersistentFlags().IntVarP(&batchSize, "batch-size", "B", defaultBatchSize, "Batch size for one process")
 	runCmd.PersistentFlags().StringVarP(&progressType, "progress-type", "P", defaultProgressType, "Progress type to be used")
 
 	runCmd.AddCommand(getResourceCmd())
 	return runCmd
 }
 
-func executePipeline(recipePath, progressType string, batchSize int, enrich func(*recipe.Recipe) error) error {
+func executePipeline(recipePath, progressType string, enrich func(*recipe.Recipe) error) error {
 	rcp, err := loadRecipe(recipePath, defaultRecipeType, defaultRecipeFormat)
 	if err != nil {
 		return err
@@ -59,7 +52,7 @@ func executePipeline(recipePath, progressType string, batchSize int, enrich func
 		return err
 	}
 	evaluate := getEvaluate()
-	pipeline, err := core.NewPipeline(rcp, evaluate, batchSize, newProgress)
+	pipeline, err := core.NewPipeline(rcp, evaluate, newProgress)
 	if err != nil {
 		return err
 	}

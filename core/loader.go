@@ -142,6 +142,9 @@ func (l *Loader) LoadSchema(rcp *recipe.Schema) (*model.Schema, error) {
 		return nil, fmt.Errorf("[%s] schema for recipe [%s] cannot be found", jsonFormat, rcp.Name)
 	}
 	data, err := l.LoadData(paths[0], rcp.Type, jsonFormat)
+	if err != nil {
+		return nil, err
+	}
 	return &model.Schema{
 		Name:   rcp.Name,
 		Data:   data,

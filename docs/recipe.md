@@ -16,6 +16,7 @@ resources:
   type: file
   path: ./example/resource
   format: json
+  batch_size: 3
   framework_names:
   - user_account_evaluation
 ...
@@ -64,6 +65,18 @@ Each resource is defined by a structure with the following fields:
             <td>indicates what format a resource was stored</td>
             <td>currently available: <i>json</i> and <i>yaml</i></td>
             <td><i>json</i></td>
+        </tr>
+        <tr>
+            <td>batch_size</td>
+            <td>indicates the number of resources to be processed at one time</td>
+            <td>
+                <ul>
+                    <li>if not set, default value is <i>4 (four)</i></li>
+                    <li>if value is negative, batch size being used is the number of data within each resource</li>
+                    <li>other cases, batch size is based on the set value until maximum number of data for each resource</li>
+                </ul>
+            </td>
+            <td><i>4</i></td>
         </tr>
         <tr>
             <td>framework_names</td>

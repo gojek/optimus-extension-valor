@@ -39,7 +39,6 @@ type Pipeline struct {
 	recipe      *recipe.Recipe
 	loader      *Loader
 	evaluate    model.Evaluate
-	batchSize   int
 	newProgress model.NewProgress
 
 	nameToFrameworkRecipe map[string]*recipe.Framework
@@ -49,7 +48,6 @@ type Pipeline struct {
 func NewPipeline(
 	rcp *recipe.Recipe,
 	evaluate model.Evaluate,
-	batchSize int,
 	newProgress model.NewProgress,
 ) (*Pipeline, error) {
 	if rcp == nil {
@@ -57,9 +55,6 @@ func NewPipeline(
 	}
 	if evaluate == nil {
 		return nil, errors.New("evaluate function is nil")
-	}
-	if batchSize < 0 {
-		return nil, errors.New("batch size should be at least zero")
 	}
 	if newProgress == nil {
 		return nil, errors.New("new progress function is nil")
@@ -72,7 +67,6 @@ func NewPipeline(
 		recipe:                rcp,
 		loader:                &Loader{},
 		evaluate:              evaluate,
-		batchSize:             batchSize,
 		newProgress:           newProgress,
 		nameToFrameworkRecipe: nameToFrameworkRecipe,
 	}, nil
@@ -151,11 +145,14 @@ func (p *Pipeline) executeOnResource(resourceRcp *recipe.Resource, nameToValidat
 		return true
 	}
 
-	progress := p.newProgress(resourceRcp.Name, len(resourcePaths))
-	batch := p.batchSize
-	if batch == 0 || batch >= len(resourcePaths) {
+	batch := resourceRcp.BatchSize
+	if batch <= 0 || batch > len(resourcePaths) {
 		batch = len(resourcePaths)
 	}
+
+	fmt.Printf(" [batch size: %d]\n", batch)
+	progress := p.newProgress(resourceRcp.Name, len(resourcePaths))
+
 	counter := 0
 	for counter < len(resourcePaths) {
 		wg := &sync.WaitGroup{}
