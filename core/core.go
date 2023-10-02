@@ -145,11 +145,14 @@ func (p *Pipeline) executeOnResource(resourceRcp *recipe.Resource, nameToValidat
 		return true
 	}
 
-	progress := p.newProgress(resourceRcp.Name, len(resourcePaths))
 	batch := resourceRcp.BatchSize
 	if batch <= 0 || batch > len(resourcePaths) {
 		batch = len(resourcePaths)
 	}
+
+	fmt.Printf(" [batch size: %d]\n", batch)
+	progress := p.newProgress(resourceRcp.Name, len(resourcePaths))
+
 	counter := 0
 	for counter < len(resourcePaths) {
 		wg := &sync.WaitGroup{}

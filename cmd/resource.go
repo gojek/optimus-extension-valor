@@ -27,7 +27,10 @@ func getResourceCmd() *cobra.Command {
 		Short: "Execute pipeline for a specific resource",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			enrich := func(rcp *recipe.Recipe) error {
-				return enrichRecipe(rcp, &resourceArg{
+				if err := enrichWithBatchSize(rcp); err != nil {
+					return err
+				}
+				return enrichWithArg(rcp, &resourceArg{
 					Name:   name,
 					Format: format,
 					Type:   _type,
@@ -46,7 +49,7 @@ func getResourceCmd() *cobra.Command {
 	return resourceCmd
 }
 
-func enrichRecipe(rcp *recipe.Recipe, arg *resourceArg) error {
+func enrichWithArg(rcp *recipe.Recipe, arg *resourceArg) error {
 	if arg.Name == "" {
 		return nil
 	}
