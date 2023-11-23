@@ -11,6 +11,7 @@ type Resource struct {
 	Name           string   `yaml:"name" validate:"required"`
 	Format         string   `yaml:"format" validate:"required,oneof=json yaml"`
 	Type           string   `yaml:"type" validate:"required,oneof=dir file"`
+	RegexPattern   string   `yaml:"regex_pattern"`
 	Path           string   `yaml:"path" validate:"required"`
 	BatchSize      int      `yaml:"batch_size"`
 	FrameworkNames []string `yaml:"framework_names" validate:"required,min=1"`
@@ -26,11 +27,12 @@ type Framework struct {
 
 // Definition is a recipe on how and where to read the actual Definition data
 type Definition struct {
-	Name     string    `yaml:"name" validate:"required"`
-	Format   string    `yaml:"format" validate:"required,oneof=json yaml"`
-	Type     string    `yaml:"type" validate:"required,oneof=dir file"`
-	Path     string    `yaml:"path" validate:"required"`
-	Function *Function `yaml:"function"`
+	Name         string    `yaml:"name" validate:"required"`
+	Format       string    `yaml:"format" validate:"required,oneof=json yaml"`
+	Type         string    `yaml:"type" validate:"required,oneof=dir file"`
+	Path         string    `yaml:"path" validate:"required"`
+	RegexPattern string    `yaml:"regex_pattern"`
+	Function     *Function `yaml:"function"`
 }
 
 // Function is a recipe on how to construct a Definition

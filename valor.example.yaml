@@ -3,6 +3,8 @@ resources:
   type: file
   path: ./example/resource
   format: json
+  batch_size: 3 # new in v0.0.5
+  regex_pattern: "[a-z]" # new in v0.0.6
   framework_names:
   - user_account_evaluation
 
@@ -24,6 +26,7 @@ frameworks:
     format: json
     type: file
     path: ./example/definition
+    regex_pattern: "[a-z]" # new in v0.0.6
     function:
       type: file
       path: ./example/procedure/construct_membership_dictionary.jsonnet

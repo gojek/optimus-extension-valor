@@ -108,7 +108,7 @@ func (p *Pipeline) executeOnResource(resourceRcp *recipe.Resource, nameToValidat
 	if resourceRcp == nil {
 		return errors.New("resource recipe is nil")
 	}
-	resourcePaths, err := ExplorePaths(resourceRcp.Path, resourceRcp.Type, resourceRcp.Format)
+	resourcePaths, err := ExplorePaths(resourceRcp.Path, resourceRcp.Type, resourceRcp.Format, resourceRcp.RegexPattern)
 	if err != nil {
 		return err
 	}
