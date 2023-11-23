@@ -11,6 +11,6 @@ for os in ${os_list[*]}; do
     for arch in ${arch_list[*]}; do
         file_name="${name}_${tag}_${os}-${arch}"
         path="${dir_output}/${file_name}"
-        GOOS=$os GOARCH=$arch go build -o ${path}
+        GOOS=$os GOARCH=$arch go build -trimpath -o ${path}
     done
 done
