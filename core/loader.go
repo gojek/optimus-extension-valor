@@ -78,7 +78,7 @@ func (l *Loader) LoadProcedure(rcp *recipe.Procedure) (*model.Procedure, error) 
 	if rcp == nil {
 		return nil, errors.New("procedure recipe is nil")
 	}
-	paths, err := ExplorePaths(rcp.Path, rcp.Type, jsonnetFormat)
+	paths, err := ExplorePaths(rcp.Path, rcp.Type, jsonnetFormat, "")
 	if err != nil {
 		return nil, err
 	}
@@ -134,7 +134,7 @@ func (l *Loader) LoadSchema(rcp *recipe.Schema) (*model.Schema, error) {
 	if rcp == nil {
 		return nil, errors.New("schema recipe is nil")
 	}
-	paths, err := ExplorePaths(rcp.Path, rcp.Type, jsonFormat)
+	paths, err := ExplorePaths(rcp.Path, rcp.Type, jsonFormat, "")
 	if err != nil {
 		return nil, err
 	}
@@ -209,7 +209,7 @@ func (l *Loader) LoadDefinition(rcp *recipe.Definition) (*model.Definition, erro
 	if rcp == nil {
 		return nil, errors.New("definition recipe is nil")
 	}
-	paths, err := ExplorePaths(rcp.Path, rcp.Type, rcp.Format)
+	paths, err := ExplorePaths(rcp.Path, rcp.Type, rcp.Format, rcp.RegexPattern)
 	if err != nil {
 		return nil, err
 	}
