@@ -16,7 +16,8 @@ resources:
   type: file
   path: ./example/resource
   format: json
-  batch_size: 3
+  batch_size: 3 # new in v0.0.5
+  regex_pattern: "[a-z]" # new in v0.0.6
   framework_names:
   - user_account_evaluation
 ...
@@ -68,7 +69,7 @@ Each resource is defined by a structure with the following fields:
         </tr>
         <tr>
             <td>batch_size</td>
-            <td>indicates the number of resources to be processed at one time</td>
+            <td><i><b>(new in v0.0.5)</b></i> indicates the number of resources to be processed at one time</td>
             <td>
                 <ul>
                     <li>if not set, default value is <i>4 (four)</i></li>
@@ -77,6 +78,12 @@ Each resource is defined by a structure with the following fields:
                 </ul>
             </td>
             <td><i>4</i></td>
+        </tr>
+        <tr>
+            <td>regex_pattern</td>
+            <td><i><b>(new in v0.0.6)</b></i> regex pattern to match the path with</td>
+            <td>should be a valid regex pattern</td>
+            <td><i>[a-z]</i></td>
         </tr>
         <tr>
             <td>framework_names</td>
@@ -113,6 +120,7 @@ frameworks:
     format: json
     type: file
     path: ./example/definition
+    regex_pattern: "[a-z]" # new in v0.0.6
     function:
       type: file
       path: ./example/procedure/construct_membership_dictionary.jsonnet
@@ -212,6 +220,7 @@ name: memberships
 format: json
 type: file
 path: ./example/definition
+regex_pattern: "[a-z]" # new in v0.0.6
 function:
   type: file
   path: ./example/procedure/construct_membership_dictionary.jsonnet
@@ -224,6 +233,7 @@ name | the name of definition | it has to be unique within a framework only and 
 type | the type of data to be read from the path specified by **path** | currently available is `file` | -
 format | the format being used to decode the data | currently available is `json` and `yaml` | -
 path | the path where to read the actual data from | the valid format based on the **type** | -
+regex_pattern | **_(new in v0.0.6)_** regex pattern to match the path with | valid regex pattern | -
 function | an optional instruction to build a definition, where the instruction follows the [Jsonnet](https://jsonnet.org/) format | - | dictionary where the key is the **name** and the value is up to the actual function defined under **function.path**
 function.type | defines the type of path specified by **function.path** | it should be valid for the given **function.path** with currently available is `file` | -
 function.path | defines the path where to read the actual function | should be valid according to the **function.type** | -
